@@ -3,6 +3,7 @@ import { bootstrapDb, loadConfig, loadRootEnv } from "@afterhours/data";
 import { runWork } from "@afterhours/engine";
 import { sendNotification } from "@afterhours/delivery";
 import { consoleLogger } from "./log";
+import { installShutdownHandlers } from "./runtime";
 import { createWorker } from "./worker";
 
 loadRootEnv();
@@ -13,13 +14,4 @@ const worker = createWorker({
 });
 worker.start();
 
-let closing = false;
-const shutdown = async () => {
-  if (closing) return;
-  closing = true;
-  await worker.stop();
-  db.close();
-  process.exit(0);
-};
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+installShutdownHandlers(worker, db);

@@ -144,18 +144,49 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, repoRoot: strin
   };
 }
 
+/**
+ * Why live generation cannot run with this server configuration, or null when it can. Mirrors the engine's
+ * own checks (docs/engine-handoff.md): only MODEL_PROVIDER=openai is implemented and it needs MODEL_NAME and
+ * OPENAI_API_KEY. Used for the status endpoint and as a pre-check so an unconfigured live task fails with a
+ * typed nonretryable error. There is never a fixture fallback.
+ */
+export function liveModelProblem(c: AppConfig): { code: string; message: string } | null {
+  if (c.modelProvider === "anthropic") {
+    return { code: "MODEL_PROVIDER_UNSUPPORTED", message: "Live generation with MODEL_PROVIDER=anthropic is not implemented. Configure MODEL_PROVIDER=openai on the server." };
+  }
+  if (c.modelProvider !== "openai") {
+    return { code: "MODEL_NOT_CONFIGURED", message: "Live generation is selected but MODEL_PROVIDER is not set to a supported provider (openai) on the server." };
+  }
+  if (!c.openaiApiKey || !c.modelName) {
+    return { code: "MODEL_NOT_CONFIGURED", message: "Live generation is selected but the server is missing the OpenAI API key or MODEL_NAME. Set both in the server environment, or switch GENERATION_MODE=fixture for new tasks." };
+  }
+  return null;
+}
+
 /** Live model configuration status. Fixture mode is always "configured". */
 export function modelStatus(c: AppConfig) {
   if (c.generationMode === "fixture") {
     return { mode: "fixture" as const, provider: "fixture" as const, configured: true, model: null };
   }
-  const key = c.modelProvider === "openai" ? c.openaiApiKey : c.modelProvider === "anthropic" ? c.anthropicApiKey : null;
   return {
     mode: "live" as const,
     provider: c.modelProvider,
-    configured: c.modelProvider !== "fixture" && !!key,
+    configured: liveModelProblem(c) === null,
     model: c.modelName,
   };
+}
+
+/**
+ * Google must redirect the browser to the public web origin (PUBLIC_APP_URL), whose Next proxy forwards
+ * /api/* to the API. The session cookie lives on that origin, so a callback on any other host or port can
+ * never be bound to the session. Returns a problem description, or null when consistent.
+ */
+export function oauthRedirectProblem(c: Pick<AppConfig, "publicAppUrl" | "google">): string | null {
+  const expected = `${c.publicAppUrl}/api/integrations/gmail/callback`;
+  if (c.google.redirectUri !== expected) {
+    return `GOOGLE_REDIRECT_URI must be exactly ${expected} (PUBLIC_APP_URL + /api/integrations/gmail/callback); it is ${c.google.redirectUri}.`;
+  }
+  return null;
 }
 
 export function whatsappConfigured(c: AppConfig): boolean {

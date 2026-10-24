@@ -56,3 +56,10 @@ Platform commit state: `e5b8510` on `platform`. Foundation engine and delivery s
 - Merge, integration run, platform failures: **Darren**.
 
 Do not start Batch 3 until this file records a passing merged commit.
+
+
+## Batch 3 status (appended)
+
+Re-checked with `git fetch origin`: still only `origin/main` (`5d8f342`) and `origin/platform` (`b442c71`). No `engine`, `experience` or Eden QA branch. The Batch 2 gate remains **BLOCKED**, so Batch 3 is also **BLOCKED** at the integrated level.
+
+Platform-only Batch 3 work (fake-engine tests, 98 tests, all checks exit 0) is described in `docs/batches/batch-3/darren.md`. It does not close either gate. When the branches exist, follow the numbered steps above, then run all four scenarios through the real worker and record the merged commit, task ids/revisions and Office file metadata here.

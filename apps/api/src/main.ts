@@ -1,4 +1,4 @@
-import { apiPortMismatch, bootstrapDb, loadConfig, loadRootEnv } from "@afterhours/data";
+import { apiPortMismatch, bootstrapDb, loadConfig, loadRootEnv, oauthRedirectProblem } from "@afterhours/data";
 import { buildApp } from "./app";
 
 loadRootEnv();
@@ -9,6 +9,8 @@ const app = await buildApp({ config, db, logger: true });
 
 const host = process.env.API_HOST ?? "127.0.0.1";
 if (portProblem) app.log.warn(portProblem);
+const redirectProblem = config.google.clientId ? oauthRedirectProblem(config) : null;
+if (redirectProblem) app.log.warn(redirectProblem);
 await app.listen({ port: config.apiPort, host });
 
 const stop = async () => {

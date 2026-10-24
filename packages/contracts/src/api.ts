@@ -45,11 +45,13 @@ export const ReviewBodySchema = z.object({
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:mm");
 
 /** Editable settings fields only. Everything is optional; nested objects merge. */
+// Strict at every level: unknown keys (credentials, eligibility, provider settings) are a 400, never silently dropped.
 export const SettingsPatchSchema = z
   .object({
     organization: OrganizationProfileSchema.omit({ id: true })
-      .extend({ brand: OrganizationProfileSchema.shape.brand.partial() })
-      .partial(),
+      .extend({ brand: OrganizationProfileSchema.shape.brand.partial().strict() })
+      .partial()
+      .strict(),
     automationEnabled: z.boolean(),
     allowedSenders: z.array(z.string().min(3).max(320)).max(50),
     autoPrepare: z.boolean(),
@@ -64,10 +66,12 @@ export const SettingsPatchSchema = z
             end: hhmm,
             timezone: z.string().min(1).max(64),
           })
-          .partial(),
+          .partial()
+          .strict(),
         digestTime: hhmm,
       })
-      .partial(),
+      .partial()
+      .strict(),
   })
   .partial()
   .strict();

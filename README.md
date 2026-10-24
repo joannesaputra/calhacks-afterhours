@@ -16,9 +16,9 @@ are frozen; propose changes in [docs/contract-change-requests.md](docs/contract-
 | `apps/worker` | Person 1 | Long-running worker: Gmail polling, job queue, notification outbox. |
 | `packages/contracts` | Person 1 | Zod schemas + inferred types shared by everyone. |
 | `packages/data` | Person 1 | SQLite (better-sqlite3) repository, migrations, Gmail adapter. |
-| `packages/engine` | Person 2 | `runWork` — planning, grounded content, DOCX/PPTX. **Foundation stub.** |
-| `packages/delivery` | Person 3 | `sendNotification` / `composeNotification`. **Foundation stub.** |
-| `fixtures/**` | Person 2 | Fictional demo inputs. **Foundation placeholders.** |
+| `packages/engine` | Person 2 | `runWork` — fixture planning, real CSV calculation, grounded content, real DOCX/PPTX; OpenAI live path (never exercised live here). |
+| `packages/delivery` | Person 3 | `sendNotification` / `composeNotification`. **Foundation stub:** outbox is simulated; there is no WhatsApp/Twilio adapter (live sends are always blocked). |
+| `fixtures/**` | Person 2 | Fictional demo inputs. |
 
 ### Package strategy
 
@@ -29,7 +29,7 @@ Import extension-less (`import { x } from "./foo"`). Browser code may import onl
 
 ## Requirements
 
-- Node.js >= 20.12 (Node 22 in Docker). pnpm 10.33.4 (`corepack enable`).
+- Node.js >= 20.19 (developed and tested on 20.20; Node 22 in Docker, not run here). pnpm 10.33.4 (`corepack enable`).
 - macOS needs Xcode CLT only if a `better-sqlite3` prebuilt binary is unavailable.
 
 ## Quick start
@@ -45,8 +45,10 @@ pnpm demo:proposal    # in another terminal: real HTTP POST to the demo endpoint
 
 Log in at http://localhost:3000 with `APP_PASSWORD` from `.env`.
 
-Until Person 2's engine is merged, demo tasks fail with `ENGINE_NOT_IMPLEMENTED`. That is intentional: the stub
-never fabricates ready work.
+The release candidate includes the real engine (fixture intelligence, no model calls) and the SpaceXAI-style web UI: a demo
+proposal or report becomes a real DOCX and PPTX. What is real, simulated or blocked is listed in
+[docs/release/capability-matrix.md](docs/release/capability-matrix.md); the exact candidate is in
+[docs/release/candidate.md](docs/release/candidate.md).
 
 ## Commands
 
@@ -56,9 +58,13 @@ never fabricates ready work.
 | `pnpm demo:proposal` / `demo:report` | Inject a fixture email over HTTP using `DEMO_CLI_TOKEN`. |
 | `pnpm test` | Vitest suites (data, API, worker). |
 | `pnpm typecheck` / `pnpm lint` / `pnpm build` | Static checks; build is dependency-ordered. |
+| `pnpm check:worker` | Exit 0 when the worker's heartbeat in the database is fresh (container health check). |
+| `pnpm backup -- create <dir>` / `verify <dir>` / `restore <dir> <newDir>` | Consistent database + artifact backup and verified restore (see runbook). |
 | `pnpm check:ready` | Startup readiness: config, migrations, ports, engine/delivery exports. No network calls. |
 | `pnpm db:reset -- --demo-only` | Delete local demo data. Refuses if Gmail data exists. |
 | `pnpm test:e2e` | Browser suite (Person 3). Prints SKIPPED until it exists. |
+
+Release status, limits and the tested demo steps: [docs/release/status.md](docs/release/status.md).
 
 See [docs/runbook.md](docs/runbook.md) for Gmail setup, deployment and troubleshooting, and
 [docs/backend-handoff.md](docs/backend-handoff.md) for routes, data model and integration notes.

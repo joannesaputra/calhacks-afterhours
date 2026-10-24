@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   consumeOauthState, createOauthState, createSession, decryptSecret, disconnectGmail, encryptSecret,
   getGmailTokens, getIntegrationStatus, lookupSession, patchSettings, revokeSession, saveGmailConnection,
-  updateGmailTokens, resolveArtifactPath, DomainError,
+  updateGmailTokens, resolveArtifactPath, DomainError, getGmailRow,
 } from "../src";
 import { makeTestDb, runToReady } from "../src/testing";
 import { symlinkSync, writeFileSync, mkdirSync } from "node:fs";
@@ -27,7 +27,8 @@ describe("token encryption", () => {
   it("keeps the refresh token when a refresh response omits it; never exposes tokens in status DTOs", () => {
     const { db, config } = makeTestDb();
     saveGmailConnection(db, config.tokenEncryptionKey, { account: "inbox@test.dev", tokens: { access_token: "ACCESS-ONE-xyz", refresh_token: "REFRESH-ONE-xyz" } }, T);
-    updateGmailTokens(db, config.tokenEncryptionKey, { access_token: "ACCESS-TWO-xyz" }, later(10));
+    const conn = getGmailRow(db)!.connection_token!;
+    expect(updateGmailTokens(db, config.tokenEncryptionKey, { access_token: "ACCESS-TWO-xyz" }, later(10), conn)).toBe(true);
     expect(getGmailTokens(db, config.tokenEncryptionKey)).toMatchObject({ access_token: "ACCESS-TWO-xyz", refresh_token: "REFRESH-ONE-xyz" });
     const status = JSON.stringify(getIntegrationStatus(db, config, T));
     expect(status).not.toMatch(/ACCESS-|REFRESH-/);

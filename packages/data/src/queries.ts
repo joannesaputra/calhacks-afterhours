@@ -3,10 +3,11 @@ import type {
   TaskStatus, TaskSummary, WorkAnswer, WorkPlan, WorkProduct, WorkQuestion,
 } from "@afterhours/contracts";
 import type { AppConfig } from "./config";
-import { modelStatus, whatsappConfigured } from "./config";
+import { modelStatus, oauthRedirectProblem, whatsappConfigured } from "./config";
 import type { Db } from "./db";
-import { notFound } from "./errors";
-import { decodeCursor, encodeCursor, rowToNotification } from "./notifications";
+import { badRequest, notFound } from "./errors";
+import { decodeCursor, encodeCursor, rowToNotification, whatsappPolicyProblem } from "./notifications";
+import { getSettings } from "./settings";
 import type { TaskRow } from "./tasks";
 import { iso, parseJson } from "./util";
 
@@ -45,6 +46,7 @@ export function listTasks(
 ): { items: TaskSummary[]; nextCursor: string | null } {
   const limit = Math.min(opts.limit ?? 30, 100);
   const c = opts.cursor ? decodeCursor(opts.cursor) : null;
+  if (opts.cursor && !c) throw badRequest("Invalid cursor.");
   const where: string[] = [];
   const args: unknown[] = [];
   if (opts.status) { where.push("status = ?"); args.push(opts.status); }
@@ -129,20 +131,26 @@ export function getIntegrationStatus(db: Db, config: AppConfig, now: Date): Inte
     "SELECT last_error FROM notifications WHERE channel=? AND state IN ('blocked','failed') ORDER BY updated_at DESC LIMIT 1",
   ).get(channel) as { last_error: string | null } | undefined;
   const healthy = !!w.hb && now.getTime() - new Date(w.hb).getTime() <= WORKER_STALE_SECONDS * 1000;
+  const gmailState = g?.state ?? "disconnected";
+  // While disconnected, explain what stops the operator from connecting (no secrets in the text).
+  const setupProblem = !config.google.clientId || !config.google.clientSecret
+    ? "Google OAuth is not configured on the server (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)."
+    : oauthRedirectProblem(config);
+  const policy = channel === "whatsapp" && settingsRow ? whatsappPolicyProblem(config, getSettings(db), now) : null;
   return {
     gmail: {
-      state: g?.state ?? "disconnected",
+      state: gmailState,
       email: g?.account ?? null,
       connectedAt: g?.connected_at ?? null,
       lastPollAt: g?.last_poll_at ?? null,
-      lastError: g?.last_error ?? null,
+      lastError: g?.last_error ?? (gmailState === "disconnected" ? setupProblem : null),
     },
     model: modelStatus(config),
     notifications: {
       channel,
       configured: channel === "outbox" ? true : whatsappConfigured(config),
       eligible: channel === "whatsapp" && config.whatsapp.useCaseEligible,
-      lastError: err?.last_error ?? null,
+      lastError: policy ?? err?.last_error ?? null,
     },
     worker: { lastHeartbeatAt: w.hb, healthy },
   };

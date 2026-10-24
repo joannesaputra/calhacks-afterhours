@@ -1,6 +1,8 @@
 // Startup readiness check. Makes no paid provider calls and no network calls.
 import net from "node:net";
-import { apiPortMismatch, bootstrapDb, loadConfig, loadRootEnv, pendingMigrations } from "@afterhours/data";
+import {
+  apiPortMismatch, bootstrapDb, liveModelProblem, loadConfig, loadRootEnv, oauthRedirectProblem, pendingMigrations,
+} from "@afterhours/data";
 
 loadRootEnv();
 let failed = false;
@@ -8,6 +10,8 @@ const check = (ok: boolean, label: string, detail = "") => {
   console.log(`${ok ? "OK  " : "FAIL"} ${label}${detail ? ` — ${detail}` : ""}`);
   if (!ok) failed = true;
 };
+
+const info = (label: string, detail: string) => console.log(`INFO ${label} — ${detail}`);
 
 const portFree = (port: number) =>
   new Promise<boolean>((resolve) => {
@@ -26,7 +30,20 @@ try {
   const mismatch = apiPortMismatch(config);
   check(mismatch === null, "API_PORT matches API_ORIGIN", mismatch ?? `${config.apiOrigin}`);
   check(await portFree(config.apiPort), `API port ${config.apiPort} available`, "FAIL here may just mean the API is already running");
-  check(await portFree(3000), "web port 3000 available", "FAIL here may just mean the web app is already running");
+  const webUrl = new URL(config.publicAppUrl);
+  const webPort = Number(webUrl.port || (webUrl.protocol === "https:" ? 443 : 80));
+  check(await portFree(webPort), `web port ${webPort} available`, "FAIL here may just mean the web app is already running");
+  // Optional integrations: missing setup is reported, never fatal. Only an inconsistent configured value fails.
+  if (config.google.clientId && config.google.clientSecret) {
+    const redirect = oauthRedirectProblem(config);
+    check(redirect === null, "GOOGLE_REDIRECT_URI matches PUBLIC_APP_URL", redirect ?? config.google.redirectUri);
+  } else {
+    info("Gmail", "not configured (GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET empty); Settings will show Gmail disconnected");
+  }
+  if (config.generationMode === "live") {
+    const p = liveModelProblem(config);
+    info("Live model", p ? `NOT configured: ${p.code}. Live tasks will fail with this code; no fixture fallback.` : `configured (${config.modelProvider}, ${config.modelName})`);
+  }
   const engine = await import("@afterhours/engine");
   check(typeof engine.runWork === "function" && typeof engine.EngineError === "function", "@afterhours/engine exports load");
   const delivery = await import("@afterhours/delivery");

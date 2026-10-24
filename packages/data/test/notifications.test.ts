@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  claimDueNotification, completeNotification, failNotification, getSettings, inQuietHours, openDb,
+  claimDueNotification, completeNotification, failNotification, getSettings, inQuietHours, markSubmitStarted, openDb,
   patchSettings, recoverNotificationLeases, scheduleNotification,
 } from "../src";
 import { makeTestDb, runToReady } from "../src/testing";
@@ -92,15 +92,24 @@ describe("notification outbox", () => {
     expect(db.prepare("SELECT state FROM notifications WHERE id=?").get(c2.id)).toEqual({ state: "failed" });
   });
 
-  it("does not resend a live send interrupted by a crash; outbox is safe to repeat", () => {
+  it("does not resend a live send interrupted after submission began; unsubmitted and outbox rows are safe to repeat", () => {
     const { db, config } = makeTestDb();
     const t0 = new Date("2026-03-02T20:00:00Z");
     patchSettings(db, { notifications: { channel: "whatsapp" } }, t0);
     runToReady(db, config, "w", t0);
-    claimDueNotification(db, "w", t0);
+    const c = claimDueNotification(db, "w", t0)!;
+    expect(markSubmitStarted(db, c.id, c.ownerToken, t0)).toBe(true);
     recoverNotificationLeases(db, new Date(t0.getTime() + 120_000));
     const r = db.prepare("SELECT state, last_error FROM notifications").get() as { state: string; last_error: string };
     expect(r.state).toBe("failed");
-    expect(r.last_error).toMatch(/uncertain/);
+    expect(r.last_error).toMatch(/DELIVERY_UNCERTAIN/);
+    expect(claimDueNotification(db, "w", new Date(t0.getTime() + 3600_000))).toBeNull();
+
+    // Worker died after claiming but BEFORE the provider could have been called: nothing external happened.
+    runToReady(db, config, "x", t0);
+    const c2 = claimDueNotification(db, "w", t0)!;
+    recoverNotificationLeases(db, new Date(t0.getTime() + 120_000));
+    expect(db.prepare("SELECT state FROM notifications WHERE id=?").get(c2.id)).toEqual({ state: "queued" });
+    expect(claimDueNotification(db, "w2", new Date(t0.getTime() + 121_000))?.id).toBe(c2.id);
   });
 });

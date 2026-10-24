@@ -168,3 +168,95 @@ describe("live configuration", () => {
     process.env.MODEL_PROVIDER = previous.provider; process.env.MODEL_NAME = previous.model; process.env.OPENAI_API_KEY = previous.key;
   });
 });
+
+describe("DOCX tables have a real grid (release defect DEF-4)", () => {
+  it("every table declares a fixed layout and grid columns wide enough to hold text, for proposal and report", async () => {
+    for (const scenario of ["proposal", "report"] as const) {
+      const result = await runWork(await inputFor(scenario), deps());
+      if (result.outcome !== "ready") throw new Error(`${scenario} did not produce files`);
+      const xml = Buffer.from(unzip(result.files.find((file) => file.format === "docx")!.bytes).get("word/document.xml")!).toString("utf8");
+      const tables = xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g) ?? [];
+      expect(tables.length).toBeGreaterThan(0);
+      for (const table of tables) {
+        const grid = [...table.matchAll(/<w:gridCol w:w="(\d+)"/g)].map((m) => Number(m[1]));
+        expect(grid.length).toBeGreaterThan(0);
+        expect(Math.min(...grid)).toBeGreaterThanOrEqual(500);
+        expect(table).toMatch(/<w:tblLayout w:type="fixed"/);
+        expect(grid.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(9000);
+      }
+    }
+  });
+});
+
+describe("a skipped message is not labelled as a proposal (DEF-6)", () => {
+  it("titles the plan with the email subject and says nothing was prepared", async () => {
+    const plans: Array<{ title: string; requestSummary: string; requestedOutputs: string[] }> = [];
+    const input = await inputFor("no_action");
+    const result = await runWork(input, { signal: new AbortController().signal, onProgress: async (p) => { if (p.plan) plans.push(p.plan); } });
+    expect(result.outcome).toBe("skipped");
+    expect(plans.length).toBeGreaterThan(0);
+    for (const plan of plans) {
+      expect(plan.title).toBe(input.email.subject.trim().replace(/\s+/g, " ").slice(0, 120));
+      expect(plan.title).not.toMatch(/launch strategy proposal/i);
+      expect(plan.requestSummary).toMatch(/nothing was prepared/);
+      expect(plan.requestedOutputs).toEqual([]);
+    }
+  });
+});
+
+describe("answers choosing a different schedule are not contradicted by fixed labels (DEF-3)", () => {
+  it("a three-week scope and schedule never appears next to 'Four-week' headings or table cells", async () => {
+    const answers = [
+      { questionId: "client_identity", answer: "Northstar Co." },
+      { questionId: "project_scope", answer: "Launch positioning and a three-week content plan" },
+      { questionId: "authorized_fee", answer: "USD 4,500" },
+      { questionId: "project_schedule", answer: "November 2-22, 2026 (three weeks)" },
+    ];
+    const resumed = await runWork(await inputFor("ambiguous", { revision: 2, answers }), deps());
+    if (resumed.outcome !== "ready") throw new Error("expected ready");
+    const products = JSON.stringify(resumed.products);
+    expect(products).toContain("three-week");
+    expect(products).not.toMatch(/four-week/i);
+    const docx = Buffer.from(unzip(resumed.files.find((file) => file.format === "docx")!.bytes).get("word/document.xml")!).toString("utf8");
+    expect(docx).not.toMatch(/four-week/i);
+  });
+});
+
+describe("report narrative follows the computed data, not the canonical sample (DEF-2)", () => {
+  async function reportWith(transform: (csv: string) => string) {
+    const input = await inputFor("report");
+    const csv = transform(new TextDecoder().decode(input.attachments[0]!.bytes));
+    input.attachments[0] = { ...input.attachments[0]!, bytes: new TextEncoder().encode(csv) };
+    const result = await runWork(input, deps());
+    if (result.outcome !== "ready") throw new Error("expected ready");
+    const docx = Buffer.from(unzip(result.files.find((file) => file.format === "docx")!.bytes).get("word/document.xml")!).toString("utf8");
+    return { products: JSON.stringify(result.products), docx };
+  }
+
+  it("canonical data keeps the original wording (25% growth, AOV remained $100)", async () => {
+    const { products } = await reportWith((c) => c);
+    expect(products).toContain("Revenue grew 25%");
+    expect(products).toContain("average order value remained $100");
+    expect(products).toContain("Both channels increased by 25%.");
+    expect(products).toContain("Average order value: $100 in both months");
+  });
+
+  it("a changed February revenue changes the title, growth and AOV statements together", async () => {
+    // Feb Website 10000 -> 11000: revenue 12000 -> 16000 (+33.3%), orders unchanged at 150, AOV $100 -> $106.67.
+    const { products, docx } = await reportWith((c) => c.replace("2026-02,Website,10000,100", "2026-02,Website,11000,100"));
+    expect(products).toContain("Revenue grew 33.3%");
+    expect(products).not.toContain("Revenue grew 25%");
+    expect(products).not.toMatch(/average order value remained/i);
+    expect(products).not.toMatch(/both months/i);
+    expect(products).not.toContain("Both channels increased by 25%");
+    expect(docx).not.toMatch(/average order value remained/i);
+  });
+
+  it("a month with zero orders is not described as an increase or a constant AOV", async () => {
+    const { products } = await reportWith((c) => c.replace("2026-02,Website,10000,100", "2026-02,Website,10000,0").replace("2026-02,Partnerships,5000,50", "2026-02,Partnerships,5000,0"));
+    expect(products).not.toMatch(/Orders increased from 120 to 0/);
+    expect(products).not.toMatch(/average order value remained/i);
+    expect(products).toContain("Orders decreased from 120 to 0");
+    expect(products).toContain("unknown for 2026-02");
+  });
+});

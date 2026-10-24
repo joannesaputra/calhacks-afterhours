@@ -22,7 +22,9 @@
     "typecheck": "pnpm -r --workspace-concurrency=1 typecheck",
     "lint": "eslint .",
     "build": "pnpm -r --workspace-concurrency=1 build",
-    "test:e2e": "node scripts/e2e.mjs"
+    "test:e2e": "node scripts/e2e.mjs",
+    "backup": "tsx scripts/backup.ts",
+    "check:worker": "tsx scripts/worker-health.ts"
   },
   "devDependencies": {
     "@afterhours/contracts": "workspace:*",

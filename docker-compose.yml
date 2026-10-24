@@ -1,11 +1,19 @@
-# Single-host deployment. The API is NOT published to the host; only web (3000) is.
-# Put an HTTPS reverse proxy / platform TLS in front of web for a public demo.
+# Single host. One writer: the api and worker share ONE named volume (SQLite + artifacts) on local disk.
+# Do not run replicas, and do not put this volume on a network filesystem.
+# Only `web` is published. The api is reachable by the other services at http://api:4000 and by nothing else.
+x-common: &common
+  build: .
+  env_file: .env
+  init: true
+  restart: unless-stopped
+
 services:
   api:
-    build: .
-    command: ["pnpm", "--filter", "@afterhours/api", "start"]
-    env_file: .env
+    <<: *common
+    # Direct node (no pnpm wrapper) so SIGTERM reaches the process and it can close cleanly.
+    command: ["node", "--import", "tsx", "apps/api/src/main.ts"]
     environment:
+      NODE_ENV: production
       API_HOST: 0.0.0.0
       DATABASE_PATH: /app/var/afterhours.sqlite
       ARTIFACTS_DIR: /app/var/artifacts
@@ -15,27 +23,36 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
   worker:
-    build: .
-    command: ["pnpm", "--filter", "@afterhours/worker", "start"]
-    env_file: .env
+    <<: *common
+    command: ["node", "--import", "tsx", "apps/worker/src/main.ts"]
     environment:
+      NODE_ENV: production
       DATABASE_PATH: /app/var/afterhours.sqlite
       ARTIFACTS_DIR: /app/var/artifacts
     volumes: ["afterhours-var:/app/var"]
+    # api starts first so migrations run once before the worker opens the database (they are safe to race anyway).
+    depends_on:
+      api:
+        condition: service_healthy
+    # The worker has no port: healthy means its heartbeat in the database is fresh (< 45 s old).
+    healthcheck:
+      test: ["CMD", "node", "--import", "tsx", "scripts/worker-health.ts"]
+      interval: 30s
+      timeout: 20s
+      start_period: 40s
+      retries: 3
+    # SHUTDOWN_GRACE_MS is 10 s; the rest of this budget lets the lease be released before SIGKILL.
     stop_grace_period: 20s
-    restart: unless-stopped
   web:
-    build: .
+    <<: *common
     command: ["pnpm", "--filter", "@afterhours/web", "start"]
-    env_file: .env
     environment:
+      NODE_ENV: production
       API_ORIGIN: http://api:4000
     ports: ["3000:3000"]
     depends_on:
       api:
         condition: service_healthy
-    restart: unless-stopped
 volumes:
   afterhours-var:

@@ -54,6 +54,17 @@ export function claimNextJob(db: Db, workerId: string, now: Date): ClaimedJob | 
   return tx.immediate();
 }
 
+/** Cheap ownership probe: true while `ref.ownerToken` still holds the running job for this task revision. */
+export function jobStillOwned(db: Db, ref: { taskId: string; revision: number; ownerToken: string }): boolean {
+  try {
+    assertOwnedJob(db, ref.taskId, ref.revision, ref.ownerToken);
+    return true;
+  } catch (e) {
+    if (e instanceof LeaseLostError) return false;
+    throw e;
+  }
+}
+
 /** Extend the lease. Returns false when ownership was lost. */
 export function heartbeatJob(db: Db, jobId: string, ownerToken: string, now: Date): boolean {
   const r = db
@@ -207,11 +218,19 @@ export function commitEngineResult(db: Db, input: CommitInput): void {
       if (input.files.length === 0) throw badRequest("A ready result needs at least one file");
       if (task.status === "planning") setStatus(db, task, "running", now);
       setStatus(db, task, "ready", now);
+      // Published manifests are immutable: a row for this task/revision/product/format is never replaced. The
+      // lease and revision checks above already stop a stale attempt; this refuses a conflicting rewrite as well.
       const insArt = db.prepare(
-        `INSERT OR REPLACE INTO artifacts (id, task_id, revision, product_id, format, rel_path, filename, mime_type, size_bytes, sha256, created_at)
+        `INSERT INTO artifacts (id, task_id, revision, product_id, format, rel_path, filename, mime_type, size_bytes, sha256, created_at)
          VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
       );
+      const existing = db.prepare("SELECT id, sha256 FROM artifacts WHERE task_id=? AND revision=? AND product_id=? AND format=?");
       for (const f of input.files) {
+        const have = existing.get(taskId, revision, f.productId, f.format) as { id: string; sha256: string } | undefined;
+        if (have) {
+          if (have.sha256 !== f.sha256) throw badRequest("A published artifact for this revision cannot be replaced");
+          continue;
+        }
         insArt.run(f.id, taskId, revision, f.productId, f.format, f.relPath, f.filename, f.mimeType, f.sizeBytes, f.sha256, t);
       }
       const productWarnings = input.products.reduce((n, p) => n + p.warnings.length, 0);

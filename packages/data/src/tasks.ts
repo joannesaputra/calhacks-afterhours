@@ -23,6 +23,8 @@ export interface TaskRow {
   products_json: string;
   questions_json: string;
   answers_json: string;
+  /** Organization profile captured at ingestion (null for tasks created before migration 002). */
+  organization_json: string | null;
   warning_count: number;
   error_json: string | null;
   created_at: string;

@@ -172,6 +172,8 @@ describe("tasks, review, downloads", () => {
   });
 });
 
+const GOOGLE = { GOOGLE_CLIENT_ID: "test-client.apps.example", GOOGLE_CLIENT_SECRET: "test-client-secret" };
+
 describe("gmail oauth routes", () => {
   const port = (): GmailOAuthPort & { revoked: number } => {
     const p = {
@@ -186,7 +188,7 @@ describe("gmail oauth routes", () => {
 
   it("binds state to the session, connects, rejects replay, and disconnects", async () => {
     const p = port();
-    const { db } = await setup({}, p);
+    const { db } = await setup(GOOGLE, p);
     const cookie = await login();
     const start = await app.inject({ method: "GET", url: "/v1/integrations/gmail/start", headers: { cookie } });
     expect(start.statusCode).toBe(302);

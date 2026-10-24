@@ -43,7 +43,8 @@ export type IngestOutcome =
 /** Demo fixtures are authorized by namespace: fictional `.example` addresses only. */
 export const isDemoSender = (email: string): boolean => /@([^@]+\.)?example$/i.test(email.trim());
 
-function audit(db: Db, reason: string, sourceRef: string, now: Date): void {
+/** Bounded intake audit row: reason + short source ref only, never message content. */
+export function auditIntake(db: Db, reason: string, sourceRef: string, now: Date): void {
   db.prepare("INSERT INTO intake_audit (reason, source_ref, created_at) VALUES (?,?,?)").run(
     reason.slice(0, 200),
     sourceRef.slice(0, 120),
@@ -71,19 +72,19 @@ export function ingestMessage(db: Db, input: IngestInput, now: Date): IngestOutc
 
     if (input.mode === "gmail") {
       if (!settings.automationEnabled) {
-        audit(db, "automation_disabled", safeRef, now);
+        auditIntake(db, "automation_disabled", safeRef, now);
         return { kind: "ignored", reason: "automation_disabled" };
       }
       if (!settings.allowedSenders.map(normalizeEmail).includes(sender)) {
-        audit(db, "sender_not_allowed", safeRef, now);
+        auditIntake(db, "sender_not_allowed", safeRef, now);
         return { kind: "ignored", reason: "sender_not_allowed" };
       }
       if (!settings.autoPrepare) {
-        audit(db, "auto_prepare_disabled", safeRef, now);
+        auditIntake(db, "auto_prepare_disabled", safeRef, now);
         return { kind: "ignored", reason: "auto_prepare_disabled" };
       }
     } else if (!isDemoSender(sender)) {
-      audit(db, "demo_sender_not_fictional", safeRef, now);
+      auditIntake(db, "demo_sender_not_fictional", safeRef, now);
       return { kind: "ignored", reason: "demo_sender_not_fictional" };
     }
 
@@ -105,20 +106,48 @@ export function ingestMessage(db: Db, input: IngestInput, now: Date): IngestOutc
 
     db.prepare(
       `INSERT INTO tasks (id, intake_id, status, revision, title, ingestion_mode, generation_mode, fixture_scenario,
-         sender_name, sender_email, subject, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         sender_name, sender_email, subject, organization_json, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).run(
       taskId, intakeId, "queued", 1,
       envelope.subject.trim().slice(0, 200) || "(no subject)",
       input.mode, input.generationMode, input.fixtureScenario,
-      envelope.from.name, sender, envelope.subject, t, t,
+      // Snapshot: generation mode and organization context are fixed at ingestion for every revision.
+      envelope.from.name, sender, envelope.subject, JSON.stringify(settings.organization), t, t,
     );
 
     const ins = db.prepare(
       "INSERT INTO task_attachments (task_id, attachment_id, filename, mime_type, size_bytes, bytes) VALUES (?,?,?,?,?,?)",
     );
+    // Intake is the one enforcement point for attachment limits, whatever the source. A file that is
+    // not stored is reported as a visible warning; the worker then refuses to treat the input as complete.
+    const keptIds = new Set<string>();
+    let keptBytes = 0;
+    const reasonFor = new Map<string, string>();
+    const warnedIds = new Set<string>();
+    const drop = (a: IngestAttachment, why: string) => {
+      reasonFor.set(a.id, why);
+      warnedIds.add(a.id);
+      warnings.push(`Attachment "${a.filename}" was not read: ${why}.`);
+    };
     for (const a of input.attachments) {
-      ins.run(taskId, a.id, a.filename, a.mimeType, a.bytes.byteLength, Buffer.from(a.bytes));
+      const size = a.bytes.byteLength;
+      if (keptIds.has(a.id)) drop(a, "its id repeats an earlier attachment");
+      else if (keptIds.size >= LIMITS.maxFiles) drop(a, `only the first ${LIMITS.maxFiles} files per email are read`);
+      else if (size > LIMITS.maxFileBytes) drop(a, `it is larger than ${LIMITS.maxFileBytes / (1024 * 1024)} MB`);
+      else if (keptBytes + size > LIMITS.maxTotalBytes) drop(a, `attachments together may not exceed ${LIMITS.maxTotalBytes / (1024 * 1024)} MB`);
+      else {
+        ins.run(taskId, a.id, a.filename, a.mimeType, size, Buffer.from(a.bytes));
+        keptIds.add(a.id);
+        keptBytes += size;
+      }
+    }
+    for (const meta of envelope.attachments) {
+      if (keptIds.has(meta.id) || warnedIds.has(meta.id)) continue;
+      const why = meta.sizeBytes > LIMITS.maxFileBytes
+          ? `it is larger than ${LIMITS.maxFileBytes / (1024 * 1024)} MB`
+          : "it was not provided to the intake step (over the file-count or total-size limit, or it could not be fetched)";
+      warnings.push(`Attachment "${meta.filename}" was not read: ${why}.`);
     }
 
     db.prepare(

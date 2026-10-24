@@ -5,12 +5,14 @@ import {
 } from "@afterhours/contracts";
 import {
   ArtifactValidationError, EngineResultError, LIMITS, LeaseLostError, MAX_ATTEMPTS, appendProgress,
-  clientWithTokens, claimDueNotification, claimNextJob, cleanStaging, commitEngineResult, completeNotification,
-  createGmailApi, failNotification, getSettings, getTaskRow, modelStatus, parseJson, pollGmailOnce, publishArtifactFiles,
+  clientWithTokens, claimDueNotification, claimNextJob, cleanOrphanArtifacts, cleanStaging, commitEngineResult,
+  completeNotification, createGmailApi, failNotification, getSettings, getTaskRow, jobStillOwned, markSubmitStarted,
+  parseJson, pollGmailOnce, promoteStagedFiles, stageArtifactFiles, verifyStoredFiles, liveModelProblem,
   recordExecutionFailure, recordWorkerHeartbeat, recoverExpiredJobs, recoverNotificationLeases, releaseJob,
-  heartbeatJob, validateEngineResult,
+  heartbeatJob, stalePolicyProblem, validateEngineResult, whatsappPolicyProblem,
   type AppConfig, type ClaimedJob, type Db, type GmailApi, type GmailTokens,
 } from "@afterhours/data";
+import { rmSync } from "node:fs";
 import type { Logger } from "./log";
 
 export const JOB_DEADLINE_MS = 240_000;
@@ -28,9 +30,29 @@ export interface WorkerDeps {
   /** Test hooks. */
   jobDeadlineMs?: number;
   heartbeatIntervalMs?: number;
+  /**
+   * Internal fault-injection seams, awaited at publication and delivery boundaries. A hook that never resolves
+   * simulates a frozen or dead process; a hook that throws simulates a crash-like error. Never wired to a route
+   * or to the production entrypoint.
+   */
+  testHooks?: {
+    afterStage?: () => Promise<void> | void;
+    afterPromote?: () => Promise<void> | void;
+    afterReadyCommit?: () => Promise<void> | void;
+    afterSubmitStarted?: () => Promise<void> | void;
+  };
 }
 
 interface SafeFailure { code: string; message: string; retryable: boolean }
+
+/** Defense in depth: provider errors are stored and shown, so strip anything shaped like a credential. */
+export function redact(message: string): string {
+  return message
+    .replace(/\b(sk|rk|pk)-[A-Za-z0-9_-]{8,}/g, "[redacted]")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(/\bya29\.[A-Za-z0-9._-]+/g, "[redacted]")
+    .replace(/\b1\/\/[A-Za-z0-9._-]{10,}/g, "[redacted]");
+}
 
 function classify(err: unknown): SafeFailure {
   const e = err as { code?: unknown; retryable?: unknown; message?: unknown; name?: unknown };
@@ -38,9 +60,33 @@ function classify(err: unknown): SafeFailure {
     return { code: err instanceof EngineResultError ? err.code : "ARTIFACT_INVALID", message: String((err as Error).message).slice(0, 500), retryable: false };
   }
   if (typeof e?.code === "string" && typeof e?.retryable === "boolean") {
-    return { code: e.code, message: String(e.message ?? "The engine reported an error.").slice(0, 500), retryable: e.retryable };
+    return { code: e.code, message: redact(String(e.message ?? "The engine reported an error.")).slice(0, 500), retryable: e.retryable };
   }
   return { code: "ENGINE_UNEXPECTED_ERROR", message: "The engine failed unexpectedly. Check worker logs for the error code.", retryable: false };
+}
+
+class AbortedError extends Error {
+  constructor() {
+    super("The run was aborted");
+    this.name = "AbortedError";
+  }
+}
+
+/**
+ * Reject as soon as the signal aborts even if the underlying work ignores it. This is a backstop only: it frees the
+ * worker to record the outcome, it does not stop CPU or network work that does not honour the AbortSignal.
+ */
+function raceAbort<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  work.catch(() => undefined); // a rejection that arrives after abandonment must not become unhandled
+  return new Promise<T>((resolve, reject) => {
+    if (signal.aborted) return reject(new AbortedError());
+    const onAbort = () => reject(new AbortedError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (v) => { signal.removeEventListener("abort", onAbort); resolve(v); },
+      (e) => { signal.removeEventListener("abort", onAbort); reject(e); },
+    );
+  });
 }
 
 export function createWorker(deps: WorkerDeps) {
@@ -50,7 +96,9 @@ export function createWorker(deps: WorkerDeps) {
   const hbMs = deps.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS;
   let stopping = false;
   let current: { promise: Promise<void>; abort: (reason: string) => void } | null = null;
+  let currentNotification: Promise<void> | null = null;
   const timers: NodeJS.Timeout[] = [];
+  const hooks = deps.testHooks ?? {};
 
   const makeGmailApi: NonNullable<WorkerDeps["makeGmailApi"]> =
     deps.makeGmailApi ??
@@ -77,10 +125,9 @@ export function createWorker(deps: WorkerDeps) {
     if (rows.length > LIMITS.maxFiles || total > LIMITS.maxTotalBytes || rows.some((r) => r.size_bytes > LIMITS.maxFileBytes)) {
       throw Object.assign(new Error("Attachments exceed the supported size limits."), { code: "ATTACHMENT_TOO_LARGE", retryable: false });
     }
-    if (task.generation_mode === "live" && !modelStatus(config).configured) {
-      throw Object.assign(new Error(
-        "Live generation is selected but no model credentials are configured on the server. Set the provider API key or switch GENERATION_MODE=fixture for new tasks.",
-      ), { code: "MODEL_NOT_CONFIGURED", retryable: false });
+    if (task.generation_mode === "live") {
+      const problem = liveModelProblem(config);
+      if (problem) throw Object.assign(new Error(problem.message), { code: problem.code, retryable: false });
     }
     const scenario = FixtureScenarioSchema.safeParse(task.fixture_scenario);
     return EngineInputSchema.parse({
@@ -89,7 +136,10 @@ export function createWorker(deps: WorkerDeps) {
       mode: task.generation_mode,
       email,
       attachments: rows.map((r) => ({ id: r.attachment_id, filename: r.filename, mimeType: r.mime_type, bytes: new Uint8Array(r.bytes) })),
-      organization: OrganizationProfileSchema.parse(getSettings(db).organization),
+      // Ingestion-time snapshot; settings edits after ingestion do not change this task's context.
+      organization: OrganizationProfileSchema.parse(
+        task.organization_json ? JSON.parse(task.organization_json) : getSettings(db).organization,
+      ),
       answers: parseJson<WorkAnswer[]>(task.answers_json, []),
       now: now().toISOString(),
       fixtureScenario: scenario.success ? scenario.data : null,
@@ -111,19 +161,31 @@ export function createWorker(deps: WorkerDeps) {
     try {
       const input = await buildInput(claimed);
       const result = validateEngineResult(
-        await deps.runWork(input, {
+        await raceAbort(deps.runWork(input, {
           signal: controller.signal,
           onProgress: async (p) => {
             if (!appendProgress(db, ref, p, now())) { abort("lease_lost"); throw new LeaseLostError(); }
           },
-        }),
+        }), controller.signal),
         input,
       );
       if (abortReason === "lease_lost") throw new LeaseLostError();
       if (result.outcome === "ready") {
-        const stored = publishArtifactFiles(config.artifactsDir, claimed.taskId, claimed.revision, result.files);
-        commitEngineResult(db, { ...ref, now: now(), outcome: "ready", plan: result.plan, sources: result.sources,
-          products: result.products, warnings: result.warnings, files: stored });
+        // Fenced publication: stage privately, re-check ownership, promote to immutable content-qualified paths
+        // (never overwriting), re-verify bytes against the manifest, and only then commit the manifest.
+        const staged = stageArtifactFiles(config.artifactsDir, claimed.taskId, claimed.revision, result.files);
+        try {
+          await hooks.afterStage?.();
+          if (!jobStillOwned(db, ref)) throw new LeaseLostError();
+          const stored = promoteStagedFiles(staged);
+          await hooks.afterPromote?.();
+          verifyStoredFiles(config.artifactsDir, stored);
+          commitEngineResult(db, { ...ref, now: now(), outcome: "ready", plan: result.plan, sources: result.sources,
+            products: result.products, warnings: result.warnings, files: stored });
+        } finally {
+          rmSync(staged.stagingDir, { recursive: true, force: true });
+        }
+        await hooks.afterReadyCommit?.();
       } else if (result.outcome === "needs_input") {
         commitEngineResult(db, { ...ref, now: now(), outcome: "needs_input", plan: result.plan, sources: result.sources,
           questions: result.questions, warnings: result.warnings });
@@ -173,12 +235,36 @@ export function createWorker(deps: WorkerDeps) {
   async function processNextNotification(): Promise<boolean> {
     const claim = claimDueNotification(db, workerId, now());
     if (!claim) return false;
+    const p = deliver(claim);
+    currentNotification = p;
+    try { await p; } finally { currentNotification = null; }
+    return true;
+  }
+
+  /**
+   * Deliver one claimed notification. Never touches jobs or task status: a notification failure cannot rerun
+   * generation or change ready work. Order matters: policy checks, then a durable "submission may begin" marker,
+   * then the provider call.
+   */
+  async function deliver(claim: NonNullable<ReturnType<typeof claimDueNotification>>): Promise<void> {
     const settings = getSettings(db);
     const until = config.whatsapp.customerServiceWindowUntil;
+    if (claim.channel === "whatsapp") {
+      // Operator policy is enforced here, before any provider code runs: a blocked configuration is
+      // terminal (no retry loop) and the ready result stays reviewable in the dashboard. Settings that changed
+      // after the message was queued block it as well; it is never rerouted to a new recipient or channel.
+      const problem = stalePolicyProblem(claim, settings) ?? whatsappPolicyProblem(config, settings, now());
+      if (problem) {
+        completeNotification(db, claim.id, claim.ownerToken,
+          { state: "blocked", message: "Not sent: live WhatsApp delivery is blocked.", providerMessageId: null, reason: problem }, now());
+        log("info", "notification.done", { notificationId: claim.id, state: "blocked" });
+        return;
+      }
+    }
     const input: DeliveryInput = {
       notificationId: claim.id,
       channel: claim.channel,
-      recipient: settings.notifications.recipient ?? config.whatsapp.to,
+      recipient: claim.channel === "whatsapp" ? config.whatsapp.to : (settings.notifications.recipient ?? config.whatsapp.to),
       publicAppUrl: config.publicAppUrl,
       tasks: claim.tasks,
       deliveryPolicy: {
@@ -187,9 +273,31 @@ export function createWorker(deps: WorkerDeps) {
         approvedContentSid: config.whatsapp.contentSid,
       },
     };
+    // Durable attempt record BEFORE the provider can see the request. If this process dies from here on, recovery
+    // records DELIVERY_UNCERTAIN instead of resending.
+    if (!markSubmitStarted(db, claim.id, claim.ownerToken, now())) {
+      log("warn", "notification.lease_lost", { notificationId: claim.id });
+      return;
+    }
+    await hooks.afterSubmitStarted?.();
     try {
       const result = DeliveryResultSchema.parse(await deps.sendNotification(input));
-      completeNotification(db, claim.id, claim.ownerToken, result, now());
+      if (result.state === "accepted" && !result.providerMessageId) {
+        // "accepted" means the provider returned a message id; without one the outcome is unknown.
+        failNotification(db, claim.id, claim.ownerToken,
+          { message: "DELIVERY_UNCERTAIN: the provider reported acceptance without a message id. It was not resent.", retryable: false }, now());
+        log("warn", "notification.failed", { notificationId: claim.id, code: "DELIVERY_UNCERTAIN" });
+        return;
+      }
+      if (result.state === "simulated" && claim.channel !== "outbox") {
+        failNotification(db, claim.id, claim.ownerToken,
+          { message: "DELIVERY_ADAPTER_ERROR: a live channel returned a simulated result; nothing was sent.", retryable: false }, now());
+        return;
+      }
+      if (!completeNotification(db, claim.id, claim.ownerToken, result, now())) {
+        log("warn", "notification.result_not_recorded", { notificationId: claim.id, state: result.state });
+        return;
+      }
       log("info", "notification.done", { notificationId: claim.id, state: result.state });
     } catch (err) {
       const e = err as { code?: unknown; retryable?: unknown; message?: unknown };
@@ -199,7 +307,6 @@ export function createWorker(deps: WorkerDeps) {
       const outcome = failNotification(db, claim.id, claim.ownerToken, { message, retryable }, now());
       log("warn", "notification.failed", { notificationId: claim.id, code, outcome });
     }
-    return true;
   }
 
   async function pollInbox() {
@@ -245,6 +352,12 @@ export function createWorker(deps: WorkerDeps) {
       while (await processNextNotification()) { /* drain */ }
     });
     loop("inbox", config.gmailPollIntervalSeconds * 1000, pollInbox);
+    // Conservative orphan cleanup (see cleanOrphanArtifacts): old, unreferenced, not in flight.
+    loop("maintenance", 6 * 3600_000, async () => {
+      const r = cleanOrphanArtifacts(db, config.artifactsDir, now().getTime());
+      cleanStaging(config.artifactsDir, now().getTime());
+      if (r.removed) log("info", "artifacts.orphans_removed", { removed: r.removed });
+    });
   }
 
   async function stop(graceMs = 10_000) {
@@ -258,6 +371,8 @@ export function createWorker(deps: WorkerDeps) {
         await job.promise.catch(() => undefined);
       }
     }
+    const send = currentNotification;
+    if (send) await Promise.race([send.catch(() => undefined), new Promise<void>((r) => setTimeout(r, graceMs))]);
     log("info", "worker.stopped", { workerId });
   }
 
