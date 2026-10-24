@@ -16,6 +16,10 @@ Last executed locally on 2026-10-23: 15 focused tests passed and the package typ
 | relative deadline | deterministic UTC instant | Uses `email.receivedAt` plus `organization.timezone`, not worker run or ingestion time |
 | live without credentials | typed failure | `MODEL_CONFIGURATION`, nonretryable, no fixture fallback |
 
+## Batch 7 triage (2026-10-24, `engine-batch7` @ `97efddf`, contains `platform-batch6`)
+
+A4 (calculated engagement interval), I1 (`usable_project_brief` for an injection-only brief) and DEF-6 (honest no-action plan) were fixed. A5 and DEF-2/3/4 were already fixed by Batch 5. Darren's four regression tests are kept. Clean worktree: 25 files, 286 tests. Worker-path downloads match the manifest and previews; 3 decks were rendered in PowerPoint. The original QA harness was unavailable, so a rerun is BLOCKED. See `docs/batches/batch-7/engine-triage.md`.
+
 ## Batch 6 final audit (2026-10-24, `engine-batch6` @ `6dde883`)
 
 These are the authenticated downloads from the real API and worker on an audit-only merge with `platform-batch5` @ `d11127b`. Details are in `docs/release/artifact-audit.md`.
