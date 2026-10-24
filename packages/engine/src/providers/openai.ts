@@ -66,7 +66,6 @@ export function openAIClientFromEnv(env: NodeJS.ProcessEnv = process.env): Model
   const provider = env.MODEL_PROVIDER;
   const model = env.MODEL_NAME?.trim();
   const apiKey = env.OPENAI_API_KEY?.trim();
-  if (provider === "anthropic") throw new EngineError("MODEL_PROVIDER_UNSUPPORTED", "Anthropic live generation is not implemented; configure MODEL_PROVIDER=openai.", false);
   if (provider !== "openai" || !model || !apiKey) throw new EngineError("MODEL_CONFIGURATION", "Live mode requires MODEL_PROVIDER=openai, MODEL_NAME, and OPENAI_API_KEY.", false);
   return createOpenAIClient({ apiKey, model });
 }

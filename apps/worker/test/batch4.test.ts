@@ -134,9 +134,11 @@ describe("live model wiring: no fixture fallback", () => {
     return { ...m, taskId };
   };
 
-  it("anthropic -> MODEL_PROVIDER_UNSUPPORTED; openai without key or model -> MODEL_NOT_CONFIGURED; engine never called", async () => {
+  it("anthropic or openai without key or model -> MODEL_NOT_CONFIGURED; engine never called", async () => {
     for (const [env, code] of [
-      [{ MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k" }, "MODEL_PROVIDER_UNSUPPORTED"],
+      [{ MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k" }, "MODEL_NOT_CONFIGURED"],
+      [{ MODEL_PROVIDER: "anthropic", MODEL_NAME: "m" }, "MODEL_NOT_CONFIGURED"],
+      [{ MODEL_PROVIDER: "anthropic", OPENAI_API_KEY: "k", MODEL_NAME: "m" }, "MODEL_NOT_CONFIGURED"],
       [{ MODEL_PROVIDER: "openai", MODEL_NAME: "m" }, "MODEL_NOT_CONFIGURED"],
       [{ MODEL_PROVIDER: "openai", OPENAI_API_KEY: "k" }, "MODEL_NOT_CONFIGURED"],
     ] as const) {
@@ -150,6 +152,13 @@ describe("live model wiring: no fixture fallback", () => {
 
   it("configured live task reaches the engine with mode=live (engine mocked)", async () => {
     const m = await liveTask({ MODEL_PROVIDER: "openai", OPENAI_API_KEY: "k", MODEL_NAME: "model-x" });
+    expect(m.engineCalls).toHaveLength(1);
+    expect(m.engineCalls[0]!.mode).toBe("live");
+    expect(getTaskSummary(m.db, m.taskId).status).toBe("ready");
+  });
+
+  it("configured Claude (anthropic) live task reaches the engine with mode=live (engine mocked)", async () => {
+    const m = await liveTask({ MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k", MODEL_NAME: "claude-x" });
     expect(m.engineCalls).toHaveLength(1);
     expect(m.engineCalls[0]!.mode).toBe("live");
     expect(getTaskSummary(m.db, m.taskId).status).toBe("ready");

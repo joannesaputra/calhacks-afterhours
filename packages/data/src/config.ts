@@ -146,19 +146,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, repoRoot: strin
 
 /**
  * Why live generation cannot run with this server configuration, or null when it can. Mirrors the engine's
- * own checks (docs/engine-handoff.md): only MODEL_PROVIDER=openai is implemented and it needs MODEL_NAME and
- * OPENAI_API_KEY. Used for the status endpoint and as a pre-check so an unconfigured live task fails with a
- * typed nonretryable error. There is never a fixture fallback.
+ * own checks (docs/engine-handoff.md): MODEL_PROVIDER=openai needs MODEL_NAME and OPENAI_API_KEY;
+ * MODEL_PROVIDER=anthropic (Claude) needs MODEL_NAME and ANTHROPIC_API_KEY. Used for the status endpoint and as a
+ * pre-check so an unconfigured live task fails with a typed nonretryable error. There is never a fixture fallback.
  */
 export function liveModelProblem(c: AppConfig): { code: string; message: string } | null {
-  if (c.modelProvider === "anthropic") {
-    return { code: "MODEL_PROVIDER_UNSUPPORTED", message: "Live generation with MODEL_PROVIDER=anthropic is not implemented. Configure MODEL_PROVIDER=openai on the server." };
+  if (c.modelProvider !== "openai" && c.modelProvider !== "anthropic") {
+    return { code: "MODEL_NOT_CONFIGURED", message: "Live generation is selected but MODEL_PROVIDER is not set to a supported provider (openai or anthropic) on the server." };
   }
-  if (c.modelProvider !== "openai") {
-    return { code: "MODEL_NOT_CONFIGURED", message: "Live generation is selected but MODEL_PROVIDER is not set to a supported provider (openai) on the server." };
-  }
-  if (!c.openaiApiKey || !c.modelName) {
-    return { code: "MODEL_NOT_CONFIGURED", message: "Live generation is selected but the server is missing the OpenAI API key or MODEL_NAME. Set both in the server environment, or switch GENERATION_MODE=fixture for new tasks." };
+  const [name, key] = c.modelProvider === "anthropic" ? ["Anthropic", c.anthropicApiKey] : ["OpenAI", c.openaiApiKey];
+  if (!key || !c.modelName) {
+    return { code: "MODEL_NOT_CONFIGURED", message: `Live generation is selected but the server is missing the ${name} API key or MODEL_NAME. Set both in the server environment, or switch GENERATION_MODE=fixture for new tasks.` };
   }
   return null;
 }
