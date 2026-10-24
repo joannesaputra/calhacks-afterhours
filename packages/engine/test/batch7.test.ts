@@ -25,13 +25,13 @@ describe("A4 — engagement interval is calculated, not hardcoded", () => {
     const { result } = await run(await inputFor("proposal"));
     if (result.outcome !== "ready") throw new Error("expected ready");
     const text = JSON.stringify(result.products);
-    expect(text).toContain("October 26 – November 22, 2026 (4 calendar weeks)");
+    expect(text).toContain("October 26-November 22, 2026 (4 calendar weeks)");
     expect(text).toContain("The end date (November 22, 2026) is calculated as 4 calendar weeks from the stated start");
     // The draft deadline stays distinct from the engagement interval.
     expect(result.plan.dueAt).toBe("2026-10-26T16:00:00.000Z");
     expect(text).toContain("Monday, October 26, 2026 at 9:00 AM PDT");
     const deck = result.files.find((file) => file.format === "pptx")!.bytes;
-    expect(xml(deck, "ppt/slides/slide4.xml")).toContain("October 26 – November 22, 2026");
+    expect(xml(deck, "ppt/slides/slide4.xml")).toContain("October 26-November 22, 2026");
   }, 20_000);
 
   it("moves the interval when the inputs change, including across a year boundary", async () => {
@@ -39,7 +39,7 @@ describe("A4 — engagement interval is calculated, not hardcoded", () => {
     const changed = withAttachmentText({ ...base, email: { ...base.email, bodyText: base.email.bodyText.replace("start October 26 and run for four weeks", "start December 21 and run for three weeks") } }, (brief) => brief.replace("the engagement lasts four weeks", "the engagement lasts three weeks"));
     const { result } = await run(changed);
     if (result.outcome !== "ready") throw new Error(`expected ready, got ${result.outcome}`);
-    expect(JSON.stringify(result.products)).toContain("December 21, 2026 – January 10, 2027 (3 calendar weeks)");
+    expect(JSON.stringify(result.products)).toContain("December 21, 2026-January 10, 2027 (3 calendar weeks)");
   }, 20_000);
 
   it("states no end date when the duration is unknown", async () => {

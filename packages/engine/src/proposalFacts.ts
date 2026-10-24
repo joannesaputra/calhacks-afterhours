@@ -139,7 +139,7 @@ export function extractProposalFacts(input: EngineInput, sources: SourceDocument
   if (!quote(brief, money) && feeKey) unknowns.push("The client brief does not restate the fee; it comes from the company's standard package.");
   unknowns.push("Payment milestones are not stated and remain to be agreed.");
 
-  const interval = startDate && endDate ? `${startDate.slice(0, -6)}${startDate.slice(-4) === endDate.slice(-4) ? "" : startDate.slice(-6)} – ${endDate}` : null;
+  const interval = startDate && endDate ? `${startDate.slice(0, -6)}${startDate.slice(-4) === endDate.slice(-4) ? "" : startDate.slice(-6)}-${endDate}` : null;
   const schedule = interval ? `${interval} (${durationWeeks} calendar weeks)` : durationWeeks ? `${startDate ? `Starts ${startDate}` : "Start date to be confirmed"}; ${durationWeeks} calendar weeks` : startDate ? `Starts ${startDate}` : "Schedule to be confirmed";
   if (endDate) unknowns.unshift(`The end date (${endDate}) is calculated as ${durationWeeks} calendar weeks from the stated start, inclusive; confirm it with the client.`);
   return {
