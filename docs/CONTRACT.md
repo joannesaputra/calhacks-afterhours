@@ -310,7 +310,7 @@ export interface IntegrationStatus {
     lastPollAt: string | null;
     lastError: string | null;
   };
-  model: { mode: GenerationMode; provider: "fixture" | "openai" | "anthropic"; configured: boolean; model: string | null };
+  model: { mode: GenerationMode; provider: "fixture" | "anthropic"; configured: boolean; model: string | null };
   notifications: { channel: "outbox" | "whatsapp"; configured: boolean; eligible: boolean; lastError: string | null };
   worker: { lastHeartbeatAt: string | null; healthy: boolean };
 }
@@ -566,7 +566,6 @@ DEMO_CLI_TOKEN=
 GENERATION_MODE=fixture
 MODEL_PROVIDER=fixture
 MODEL_NAME=
-OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=

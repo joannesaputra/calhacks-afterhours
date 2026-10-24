@@ -10,7 +10,7 @@ export interface ModelResponse {
   providerRequestId: string | null;
 }
 export interface ModelClient {
-  readonly provider: "openai" | "anthropic" | "test";
+  readonly provider: "anthropic" | "test";
   readonly model: string;
   /** Must honor `signal` for the network request and the body read; throws EngineError for provider failures. */
   complete(request: ModelRequest, signal: AbortSignal): Promise<ModelResponse>;

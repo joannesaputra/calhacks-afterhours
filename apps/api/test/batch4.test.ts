@@ -229,7 +229,7 @@ describe("settings PATCH: operator fields cannot be set from the browser", () =>
       { notifications: { eligible: true } },
       { twilioAuthToken: "x" },
       { generationMode: "live" },
-      { openaiApiKey: "sk-test" },
+      { anthropicApiKey: "sk-test" },
       { organization: { id: "other" } },
       { notifications: { recipient: "not-a-phone" } },
     ]) {

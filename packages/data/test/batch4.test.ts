@@ -238,7 +238,7 @@ describe("auth failure, quota and snapshots", () => {
   });
 
   it("receivedAt is Gmail internalDate; createdAt is ingestion time; generation mode and organization are snapshotted", async () => {
-    const { db, config } = connected(["boss@client.test"], { GENERATION_MODE: "live", MODEL_PROVIDER: "openai" });
+    const { db, config } = connected(["boss@client.test"], { GENERATION_MODE: "live", MODEL_PROVIDER: "anthropic" });
     const { api } = fakeInbox([message("m1", at(10).getTime(), "boss@client.test")]);
     await pollGmailOnce({ db, config, now: () => at(300), makeApi: () => api });
     const id = (db.prepare("SELECT id FROM tasks").get() as { id: string }).id;

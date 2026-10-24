@@ -16,7 +16,7 @@ are frozen; propose changes in [docs/contract-change-requests.md](docs/contract-
 | `apps/worker` | Person 1 | Long-running worker: Gmail polling, job queue, notification outbox. |
 | `packages/contracts` | Person 1 | Zod schemas + inferred types shared by everyone. |
 | `packages/data` | Person 1 | SQLite (better-sqlite3) repository, migrations, Gmail adapter. |
-| `packages/engine` | Person 2 | `runWork` — fixture planning, real CSV calculation, grounded content, real DOCX/PPTX; OpenAI live path (never exercised live here). |
+| `packages/engine` | Person 2 | `runWork` — fixture planning, real CSV calculation, grounded content, real DOCX/PPTX; Claude (Anthropic) live path (never exercised live here). |
 | `packages/delivery` | Person 3 | `sendNotification` / `composeNotification`. **Foundation stub:** outbox is simulated; there is no WhatsApp/Twilio adapter (live sends are always blocked). |
 | `fixtures/**` | Person 2 | Fictional demo inputs. |
 

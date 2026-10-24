@@ -47,8 +47,7 @@ describe("Anthropic (Claude) provider", () => {
 
   it("selects the provider from the environment and fails closed when anything is missing", () => {
     expect(liveClientFromEnv({ MODEL_PROVIDER: "anthropic", MODEL_NAME: "claude-test", ANTHROPIC_API_KEY: "k" })).toMatchObject({ provider: "anthropic", model: "claude-test" });
-    expect(liveClientFromEnv({ MODEL_PROVIDER: "openai", MODEL_NAME: "gpt-test", OPENAI_API_KEY: "k" })).toMatchObject({ provider: "openai" });
-    for (const env of [{ MODEL_PROVIDER: "anthropic", MODEL_NAME: "m" }, { MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k" }, { MODEL_PROVIDER: "anthropic", OPENAI_API_KEY: "k", MODEL_NAME: "m" }, { MODEL_PROVIDER: "fixture" }, {}]) {
+    for (const env of [{ MODEL_PROVIDER: "anthropic", MODEL_NAME: "m" }, { MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k" }, { MODEL_PROVIDER: "openai", MODEL_NAME: "m", ANTHROPIC_API_KEY: "k" }, { MODEL_PROVIDER: "fixture" }, {}]) {
       expect(() => liveClientFromEnv(env)).toThrowError(expect.objectContaining({ code: "MODEL_CONFIGURATION", retryable: false }));
     }
     expect(() => anthropicClientFromEnv({ MODEL_PROVIDER: "openai", MODEL_NAME: "m", ANTHROPIC_API_KEY: "k" })).toThrow(EngineError);

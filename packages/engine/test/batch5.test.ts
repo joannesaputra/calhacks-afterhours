@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EngineInput, EngineProgress, EngineResult } from "@afterhours/contracts";
 import { calculateSales, createEngine, EngineError, runWork, type ModelClient, type ModelResponse } from "../src/index";
 import { deckLayoutIssues } from "../src/layout";
-import { createOpenAIClient, openAIStatusError } from "../src/providers/openai";
+import { anthropicStatusError, createAnthropicClient } from "../src/providers/anthropic";
 import { listItems } from "../src/proposalFacts";
 import { officeText } from "../src/text";
 import { inputFor } from "./fixtures";
@@ -181,7 +181,7 @@ describe("call budget and repair", () => {
   it("never falls back to fixtures: missing provider configuration fails before any work", async () => {
     const { input } = await liveCase();
     const previous = { ...process.env };
-    process.env.MODEL_PROVIDER = "openai"; delete process.env.MODEL_NAME; delete process.env.OPENAI_API_KEY;
+    process.env.MODEL_PROVIDER = "anthropic"; delete process.env.MODEL_NAME; delete process.env.ANTHROPIC_API_KEY;
     const progress: EngineProgress[] = [];
     await expect(runWork(input, deps(undefined, progress))).rejects.toMatchObject({ code: "MODEL_CONFIGURATION", retryable: false });
     expect(progress).toHaveLength(0);
@@ -191,7 +191,7 @@ describe("call budget and repair", () => {
 
 describe("provider error mapping", () => {
   it("maps HTTP statuses to retryable versus permanent errors", () => {
-    expect([401, 403, 400, 404, 408, 429, 500, 503].map((status) => { const error = openAIStatusError(status); return [status, error.code, error.retryable]; })).toEqual([
+    expect([401, 403, 400, 404, 408, 429, 500, 503].map((status) => { const error = anthropicStatusError(status); return [status, error.code, error.retryable]; })).toEqual([
       [401, "MODEL_AUTHENTICATION", false], [403, "MODEL_AUTHENTICATION", false], [400, "MODEL_REQUEST_REJECTED", false], [404, "MODEL_REQUEST_REJECTED", false],
       [408, "MODEL_TIMEOUT", true], [429, "MODEL_RATE_LIMIT", true], [500, "MODEL_PROVIDER", true], [503, "MODEL_PROVIDER", true],
     ]);
@@ -200,7 +200,7 @@ describe("provider error mapping", () => {
   it("never copies provider bodies or keys into error messages, and passes the signal to fetch", async () => {
     const secret = "sk-test-SECRET-should-not-leak";
     let signalSeen: AbortSignal | undefined;
-    const client = createOpenAIClient({ apiKey: secret, model: "m", fetch: async (_url, init) => { signalSeen = init?.signal ?? undefined; return new Response(JSON.stringify({ error: { message: `bad key ${secret}` } }), { status: 401 }); } });
+    const client = createAnthropicClient({ apiKey: secret, model: "m", fetch: async (_url, init) => { signalSeen = init?.signal ?? undefined; return new Response(JSON.stringify({ error: { message: `bad key ${secret}` } }), { status: 401 }); } });
     const error = await client.complete({ instructions: "x", input: "y", maxOutputTokens: 10 }, new AbortController().signal).then(() => { throw new Error("expected failure"); }, (caught: unknown) => caught as EngineError);
     expect(error).toMatchObject({ code: "MODEL_AUTHENTICATION", retryable: false });
     expect(error.message).not.toContain(secret);
@@ -209,14 +209,14 @@ describe("provider error mapping", () => {
 
   it("maps network failure to a retryable error without the raw error text", async () => {
     const { input } = await liveCase();
-    const fetchFail = createOpenAIClient({ apiKey: "k", model: "m", fetch: async () => { throw new TypeError("getaddrinfo ENOTFOUND internal-host.example"); } });
+    const fetchFail = createAnthropicClient({ apiKey: "k", model: "m", fetch: async () => { throw new TypeError("getaddrinfo ENOTFOUND internal-host.example"); } });
     const error = await createEngine({ modelClient: fetchFail }).runWork(input, deps()).then(() => { throw new Error("expected failure"); }, (caught: unknown) => caught as EngineError);
     expect(error).toMatchObject({ code: "MODEL_NETWORK", retryable: true });
     expect(error.message).not.toContain("internal-host");
   });
 
-  it("parses usage and incomplete status from a Responses API body", async () => {
-    const client = createOpenAIClient({ apiKey: "k", model: "m", fetch: async () => new Response(JSON.stringify({ status: "incomplete", output: [{ content: [{ text: "{" }] }], usage: { input_tokens: 7, output_tokens: 3 } }), { status: 200, headers: { "x-request-id": "req_1" } }) });
+  it("parses usage and incomplete status from a Messages API body", async () => {
+    const client = createAnthropicClient({ apiKey: "k", model: "m", fetch: async () => new Response(JSON.stringify({ stop_reason: "max_tokens", content: [{ type: "text", text: "{" }], usage: { input_tokens: 7, output_tokens: 3 } }), { status: 200, headers: { "request-id": "req_1" } }) });
     expect(await client.complete({ instructions: "x", input: "y", maxOutputTokens: 10 }, new AbortController().signal)).toEqual({ text: "{", status: "incomplete", usage: { inputTokens: 7, outputTokens: 3 }, providerRequestId: "req_1" });
   });
 });

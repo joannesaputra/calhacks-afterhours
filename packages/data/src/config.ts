@@ -37,9 +37,8 @@ const EnvSchema = z.object({
   DEMO_ENABLED: bool(false),
   DEMO_CLI_TOKEN: optStr,
   GENERATION_MODE: z.preprocess(blank, z.enum(["fixture", "live"]).default("fixture")),
-  MODEL_PROVIDER: z.preprocess(blank, z.enum(["fixture", "openai", "anthropic"]).default("fixture")),
+  MODEL_PROVIDER: z.preprocess(blank, z.enum(["fixture", "anthropic"]).default("fixture")),
   MODEL_NAME: optStr,
-  OPENAI_API_KEY: optStr,
   ANTHROPIC_API_KEY: optStr,
   GOOGLE_CLIENT_ID: optStr,
   GOOGLE_CLIENT_SECRET: optStr,
@@ -69,9 +68,8 @@ export interface AppConfig {
   demoEnabled: boolean;
   demoCliToken: string | null;
   generationMode: "fixture" | "live";
-  modelProvider: "fixture" | "openai" | "anthropic";
+  modelProvider: "fixture" | "anthropic";
   modelName: string | null;
-  openaiApiKey: string | null;
   anthropicApiKey: string | null;
   google: { clientId: string | null; clientSecret: string | null; redirectUri: string };
   gmailPollIntervalSeconds: number;
@@ -123,7 +121,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, repoRoot: strin
     generationMode: e.GENERATION_MODE,
     modelProvider: e.GENERATION_MODE === "fixture" ? "fixture" : e.MODEL_PROVIDER,
     modelName: e.MODEL_NAME ?? null,
-    openaiApiKey: e.OPENAI_API_KEY ?? null,
     anthropicApiKey: e.ANTHROPIC_API_KEY ?? null,
     google: {
       clientId: e.GOOGLE_CLIENT_ID ?? null,
@@ -146,17 +143,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, repoRoot: strin
 
 /**
  * Why live generation cannot run with this server configuration, or null when it can. Mirrors the engine's
- * own checks (docs/engine-handoff.md): MODEL_PROVIDER=openai needs MODEL_NAME and OPENAI_API_KEY;
- * MODEL_PROVIDER=anthropic (Claude) needs MODEL_NAME and ANTHROPIC_API_KEY. Used for the status endpoint and as a
- * pre-check so an unconfigured live task fails with a typed nonretryable error. There is never a fixture fallback.
+ * own checks (docs/engine-handoff.md): live generation uses Claude, so it needs MODEL_PROVIDER=anthropic,
+ * MODEL_NAME and ANTHROPIC_API_KEY. Used for the status endpoint and as a pre-check so an unconfigured live task
+ * fails with a typed nonretryable error. There is never a fixture fallback.
  */
 export function liveModelProblem(c: AppConfig): { code: string; message: string } | null {
-  if (c.modelProvider !== "openai" && c.modelProvider !== "anthropic") {
-    return { code: "MODEL_NOT_CONFIGURED", message: "Live generation is selected but MODEL_PROVIDER is not set to a supported provider (openai or anthropic) on the server." };
+  if (c.modelProvider !== "anthropic") {
+    return { code: "MODEL_NOT_CONFIGURED", message: "Live generation is selected but MODEL_PROVIDER is not set to anthropic (Claude) on the server." };
   }
-  const [name, key] = c.modelProvider === "anthropic" ? ["Anthropic", c.anthropicApiKey] : ["OpenAI", c.openaiApiKey];
-  if (!key || !c.modelName) {
-    return { code: "MODEL_NOT_CONFIGURED", message: `Live generation is selected but the server is missing the ${name} API key or MODEL_NAME. Set both in the server environment, or switch GENERATION_MODE=fixture for new tasks.` };
+  if (!c.anthropicApiKey || !c.modelName) {
+    return { code: "MODEL_NOT_CONFIGURED", message: "Live generation is selected but the server is missing the Anthropic API key or MODEL_NAME. Set both in the server environment, or switch GENERATION_MODE=fixture for new tasks." };
   }
   return null;
 }
