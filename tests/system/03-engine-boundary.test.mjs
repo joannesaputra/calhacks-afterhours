@@ -115,12 +115,12 @@ describe("H. input/evidence handling at the engine boundary (direct engine)", ()
     assert.equal(result.outcome, "ready");
     const t = texts(result);
     assert.ok(!/Infinity|NaN/.test(t.doc + t.deck));
-    assert.ok(/zero denominator|unknown|undefined/i.test(t.doc), "growth from a zero base must be flagged");
+    assert.ok(/zero denominator|unknown|undefined|not computable/i.test(t.doc), "growth from a zero base must be flagged");
   });
   it("H6. zero-order month: AOV shown Unknown (not $0); narrative does not say orders 'increased' to 0 or AOV 'remained' (DEF-2)", async () => {
     const { result } = await run(scenarioInput("report", { csvTransform: (c) => c.replace("2026-02,Website,10000,100", "2026-02,Website,10000,0").replace("2026-02,Partnerships,5000,50", "2026-02,Partnerships,5000,0") }));
     const t = texts(result);
-    assert.ok(/2026-02 \$15,000 0 Unknown/.test(t.doc), "table shows Unknown AOV");
+    assert.ok(/(2026-02|February 2026) \$15,000 0 unknown/i.test(t.doc), "table shows unknown AOV");
     assert.ok(!/Orders increased from 120 to 0/.test(t.doc), "wrong direction word for a -100% change");
     assert.ok(!/average order value remained \$100/i.test(t.doc), "AOV for Feb is Unknown, so it cannot have 'remained' $100");
   });

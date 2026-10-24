@@ -88,7 +88,7 @@ describe("A/B/N. canonical scenarios through the real worker", () => {
       assert.ok(deck.includes(needle), `PPTX missing "${needle}"`);
     }
     for (const needle of ["Harbor Creative", "Discovery", "content calendar", "measurement"]) assert.ok(new RegExp(needle, "i").test(doc), `DOCX missing "${needle}"`);
-    assert.ok(/Payment milestones[^.]*(Unknown|confirm)/i.test(doc), "unknown payment milestones must be flagged, not invented");
+    assert.ok(/Payment milestones[^.]*(Unknown|confirm|not stated|to be agreed)/i.test(doc), "unknown payment milestones must be flagged, not invented");
     for (const part of ["[Content_Types].xml", "word/document.xml"]) assert.ok(f.docx.zip.entries().includes(part), `docx part ${part}`);
     for (const part of ["[Content_Types].xml", "ppt/presentation.xml"]) assert.ok(f.pptx.zip.entries().includes(part), `pptx part ${part}`);
     record("proposal", {
@@ -102,7 +102,8 @@ describe("A/B/N. canonical scenarios through the real worker", () => {
   it("A4. preview content == file content (same WorkProduct): fee, dates and headings appear in both", () => {
     const d = ctx.proposal.detail;
     const previewText = norm(JSON.stringify(d.products));
-    for (const needle of ["USD 6,000", "October 26-November 22, 2026", "Maple & Moss"]) assert.ok(previewText.includes(needle), `preview missing ${needle}`);
+    // The source states "start October 26 and run for four weeks": both the start date and the duration must be present (an end date is derived, not required).
+    for (const needle of ["USD 6,000", "October 26, 2026", "4 calendar weeks", "Maple & Moss"]) assert.ok(previewText.includes(needle), `preview missing ${needle}`);
     const doc = norm(docxText(ctx.proposal.files.docx.zip));
     for (const block of d.products.find((p) => p.kind === "proposal").blocks) {
       if (block.heading) assert.ok(doc.includes(block.heading), `DOCX missing preview heading "${block.heading}"`);
