@@ -33,7 +33,7 @@ NOT RUN = not executed. "Candidate" = unmodified `4e1b5ae`. "Scratch-patched" = 
 | D | Clarification: stable required questions, bad submits safe, one new revision/job, answers reflected | questions, refresh stability, 8 bad submissions, wrong-state actions PASS (D1–D4); resume **FAIL** (D5, D6, D8 cascade DEF-1) | D1–D6, D8 PASS; D7 **FAIL** (DEF-3) | Full HTTP + worker |
 | E | No action: skipped, zero files/notifications; cannot approve | PASS | PASS | Full HTTP + worker |
 | E′ | Old approved proposal mentioned in a new email is not a delegated task | NOT RUN — public inject takes a scenario name only; QA does not weaken it | — | — |
-| F | Dedupe (sequential + 12 simultaneous), approve only ready, retry only failed, stale revision rejected | PASS | PASS | Full HTTP; black-box (Darren's own race tests are unit-level, 98 → 108 pass in `pnpm test`) |
+| F | Dedupe (sequential + 12 simultaneous), approve only ready, retry only failed, stale revision rejected | PASS | PASS | Full HTTP; black-box (Darren's own race tests are unit-level and pass in `pnpm test`) |
 | F′ | Failure/retry: live mode without credentials fails honestly, retry → revision 2, no fixture fallback | PASS | PASS | Full HTTP + worker |
 | F″ | Old artifact reference cannot overwrite a newer manifest; controlled worker-kill race | NOT RUN — needs a ready→failed→retry path with stored artifacts, or Darren's controlled race harness | — | — |
 | G | Unauthenticated blocked, CLI token scope, Origin, cookie flags, logout revoke, traversal-shaped ids, no path/secret leak | PASS (9/9) | PASS | Full HTTP |
@@ -64,7 +64,7 @@ PPTX native chart `[12000, 16000]`. Preview chart data equals file chart data. W
 
 ## End quality questions
 
-1. **Commits inspected/tested:** `origin/platform` `aaed3db`, `origin/person-2-engine` `258e2eb`, merge `4e1b5ae` (local). `b442c71`/`e5b8510` appear in `aaed3db`'s history and were not tested separately. The "74 tests" figure from the earlier report is a teammate report; I observed 108 owner unit tests on the candidate.
+1. **Commits inspected/tested:** `origin/platform` `aaed3db`, `origin/person-2-engine` `258e2eb`, merge `4e1b5ae` (local). `b442c71`/`e5b8510` appear in `aaed3db`'s history and were not tested separately. The "74 tests" figure from the earlier report is a teammate report; I observed 109 owner unit tests on the candidate (108 pass, 1 stale failure), which includes Joanne's engine tests.
 2. **Batch 2 gate:** the real engine now exists and runs, but the real worker cannot store its output (DEF-1). Gate: **FAIL**, no longer merely blocked on a missing engine. Browser half still **BLOCKED** (no experience branch).
 3. **Isolation:** yes. Throwaway DB/artifacts under `os.tmpdir()`, fresh environment (no inherited keys, no `.env`), free ports, outbox channel. Zero external messages; `integrations` shows Gmail disconnected and model fixture. My own other scratch runs started and stopped only their own processes; I never touched ports 4000/4177.
 4. **Runnable by someone else:** yes, `node --import tsx --test tests/system/*.test.mjs` after `pnpm install`; needs `unzip`. No hidden state.

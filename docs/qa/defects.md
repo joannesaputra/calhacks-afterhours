@@ -27,7 +27,7 @@ revisions; P2 non-blocking usability, layout or tooling. Fix commit and retest c
   sanitiser alone would not be enough: the id itself must not contain `/`.
 - **Evidence:** observed in a real API+worker run (task `2b29fe3a-ebf3-4db8-9f1f-7eba970a0176`, throwaway DB, since deleted);
   `pnpm test` also shows `apps/worker/test/worker.test.ts` "foundation engine stub fails honestly" now failing with
-  `ARTIFACT_INVALID` instead of `ENGINE_NOT_IMPLEMENTED`. 21 of 53 system checks fail on the candidate, 11 of them only because of this.
+  `ARTIFACT_INVALID` instead of `ENGINE_NOT_IMPLEMENTED`. 21 of 53 system checks fail on the candidate; 16 of them fail because of this defect (the other 5 are DEF-2 and DEF-4).
 - **Proposed patch (not applied to the candidate):** in `stableId`, `parts.map(String).join("-").replace(/[^a-zA-Z0-9._-]+/g, "-")`.
   Verified only in a scratch worktree: the same four scenarios then reach `ready`, downloads succeed, and 47 of 53 system checks pass
   (the remaining six are DEF-2/3/4). Joanne owns the fix; Darren should add a platform-side unit test that feeds real engine
