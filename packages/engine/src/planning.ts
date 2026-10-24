@@ -27,13 +27,22 @@ export function makePlan(input: EngineInput, sources: SourceDocument[], classifi
   const requestedOutputs: OutputKind[] = classification === "report" ? ["report", "presentation"] : classification === "proposal" || classification === "ambiguous" ? ["proposal", "presentation"] : [];
   const deadline = classification === "proposal" ? resolveDeadline(input.email.bodyText, input.email.receivedAt, input.organization.timezone) : null;
   const client = input.email.subject.match(/\bfor\s+(.+?)\s*$/i)?.[1] ?? "Client";
+  const subject = input.email.subject.trim() || "(no subject)";
+  const titles: Record<Classification, [string, string]> = {
+    proposal: [`${client} proposal and kickoff deck`, "Prepare a review-draft proposal and kickoff deck from the email, its attachments, and the company profile."],
+    report: ["Sales performance report and deck", "Prepare a short sales report and presentation using only the attached CSV; numbers are calculated in code."],
+    ambiguous: ["Proposal and deck (details needed)", "Prepare a client proposal and short presentation after the material details are supplied."],
+    no_action: [`No action: ${subject}`.slice(0, 120), "Informational message with no delegated assignment; no files will be prepared."],
+    unsupported: [`Unsupported request: ${subject}`.slice(0, 120), "The request is outside supported proposal, report, and presentation work; no files will be prepared."],
+  };
+  const prepares = classification === "proposal" || classification === "report" || classification === "ambiguous";
   return {
-    title: classification === "report" ? "January-February sales performance update" : classification === "ambiguous" ? "Client proposal and short deck" : `${client} launch strategy proposal`,
-    requestSummary: classification === "report" ? "Prepare a short sales report and five-slide update using only the attached CSV." : classification === "ambiguous" ? "Prepare a client proposal and short presentation after material details are supplied." : "Prepare a review-draft proposal and five-slide kickoff deck for the stated launch strategy engagement.",
+    title: titles[classification][0],
+    requestSummary: titles[classification][1],
     requestedOutputs, dueAt: deadline?.dueAt ?? null,
     dueAtExplanation: deadline?.explanation ?? null,
-    steps: ["Extract and normalize authorized sources", "Resolve material unknowns", "Generate grounded structured content", "Verify evidence and calculations", "Export matching Office files"],
-    assumptions: classification === "report" ? ["USD amounts are reported exactly as supplied; causal explanations are out of scope."] : ["Any audience segments are working hypotheses, not established demographic facts.", "The deliverables are review drafts and have not been sent or accepted."],
+    steps: prepares ? ["Extract and normalize authorized sources", "Resolve material unknowns", "Generate grounded structured content", "Verify evidence and calculations", "Export matching Office files"] : ["Read the message", "Confirm whether supported work is requested"],
+    assumptions: classification === "report" ? ["USD amounts are reported exactly as supplied; causal explanations are out of scope."] : prepares ? ["Any audience segments are working hypotheses, not established demographic facts.", "The deliverables are review drafts and have not been sent or accepted."] : [],
     questions,
     sourcesUsed: sources.filter((source) => source.extractionStatus === "complete").map((source) => source.id),
   };
