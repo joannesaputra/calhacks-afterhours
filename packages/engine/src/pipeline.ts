@@ -65,20 +65,23 @@ export async function execute(inputValue: EngineInput, deps: EngineDependencies,
   const deadlines = resolveDeadlines(input.email.bodyText, input.email.receivedAt, input.organization.timezone);
   const requestedSlides = requestedSlideCount(`${input.email.subject}\n${input.email.bodyText}`);
   const { metrics, error: metricsError } = sourceMetrics(sources);
-  const context = (dueAt: string | null): VerifyContext => ({ metrics, requestedSlides, organizationCurrency: input.organization.currency, allowedDates: dueAt ? [localDateKey(dueAt, input.organization.timezone)] : [] });
+  const context = (dueAt: string | null, derivedDates: string[] = []): VerifyContext => ({ metrics, requestedSlides, organizationCurrency: input.organization.currency, allowedDates: [...(dueAt ? [localDateKey(dueAt, input.organization.timezone)] : []), ...derivedDates] });
+  let derivedDates: string[] = [];
 
   let plan: WorkPlan;
   let products: WorkProduct[];
   let verifyContext: VerifyContext;
   if (client) {
     await emit({ stage: "plan", message: `Requesting a bounded structured plan from the configured live model (${client.model}).` });
-    const { result: live } = await generateLive(input, sources, { client, limits: options.limits, clock: options.clock, signal, emit, context: context(deadlines[0]?.dueAt ?? null), metricsError, deadline: deadlines.length === 1 ? deadlines[0]! : null });
+    // Engagement dates are calculated in code (pure, no model call); the model may restate them but not invent others.
+    derivedDates = extractProposalFacts(input, sources).derivedDates;
+    const { result: live } = await generateLive(input, sources, { client, limits: options.limits, clock: options.clock, signal, emit, context: context(deadlines[0]?.dueAt ?? null, derivedDates), metricsError, deadline: deadlines.length === 1 ? deadlines[0]! : null });
     if (live.outcome === "skipped") return { outcome: "skipped", reason: live.reason, sources };
     plan = live.plan;
     await emit({ stage: "plan", message: "Validated the live model plan.", plan });
     if (live.outcome === "needs_input") return { outcome: "needs_input", plan, sources, questions: live.questions, warnings };
     products = live.products;
-    verifyContext = context(plan.dueAt);
+    verifyContext = context(plan.dueAt, derivedDates);
   } else {
     const classification = classify(input);
     plan = makePlan(input, sources, classification);
@@ -107,6 +110,7 @@ export async function execute(inputValue: EngineInput, deps: EngineDependencies,
         return { outcome: "needs_input", plan, sources, questions: facts.questions, warnings };
       }
       plan.title = `${facts.client} proposal and kickoff deck`;
+      derivedDates = facts.derivedDates;
       products = proposalProducts(input, sources, plan, false, facts);
     } else {
       if (metricsError) throw metricsError;
@@ -118,7 +122,7 @@ export async function execute(inputValue: EngineInput, deps: EngineDependencies,
       plan.title = `${reportTitle(metrics)} sales performance update`;
       products = reportProducts(input, sources, plan, metrics);
     }
-    verifyContext = context(plan.dueAt);
+    verifyContext = context(plan.dueAt, derivedDates);
   }
   await emit({ stage: "generate", message: "Generated structured content used by both previews and files." });
   verifyProducts(plan, sources, products, verifyContext);

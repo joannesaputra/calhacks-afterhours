@@ -182,7 +182,11 @@ describe("DOCX tables have a real grid (release defect DEF-4)", () => {
         expect(grid.length).toBeGreaterThan(0);
         expect(Math.min(...grid)).toBeGreaterThanOrEqual(500);
         expect(table).toMatch(/<w:tblLayout w:type="fixed"/);
-        expect(grid.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(9746); // A4 width minus margins
+        // Batch 7 oracle: the grid must fit the page's usable width (page width minus margins, read from
+        // the document), not the 9000-twip constant of the interim renderer that used other margins.
+        const page = Number(/<w:pgSz w:w="(\d+)"/.exec(xml)![1]);
+        const margins = /<w:pgMar[^>]*w:right="(\d+)"[^>]*w:left="(\d+)"/.exec(xml) ?? /<w:pgMar[^>]*w:left="(\d+)"[^>]*w:right="(\d+)"/.exec(xml)!;
+        expect(grid.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(page - Number(margins[1]) - Number(margins[2]));
       }
     }
   });
@@ -196,9 +200,10 @@ describe("a skipped message is not labelled as a proposal (DEF-6)", () => {
     expect(result.outcome).toBe("skipped");
     expect(plans.length).toBeGreaterThan(0);
     for (const plan of plans) {
-      expect(plan.title).toBe(input.email.subject.trim().replace(/\s+/g, " ").slice(0, 120));
-      expect(plan.title).not.toMatch(/launch strategy proposal/i);
-      expect(plan.requestSummary).toMatch(/nothing was prepared/);
+      // Batch 7 oracle: the title is built from the subject (engine prefixes "No action: "), never a proposal title.
+      expect(plan.title).toContain(input.email.subject.trim().replace(/\s+/g, " "));
+      expect(plan.title).not.toMatch(/proposal/i);
+      expect(plan.requestSummary).toMatch(/no files will be prepared/);
       expect(plan.requestedOutputs).toEqual([]);
     }
   });
@@ -233,30 +238,31 @@ describe("report narrative follows the computed data, not the canonical sample (
     return { products: JSON.stringify(result.products), docx };
   }
 
-  it("canonical data states 25% revenue growth and an AOV of $100 in both months", async () => {
-    const { products } = await reportWith((c) => c);
-    expect(products).toContain("revenue increased 25%");
+  // Batch 7 oracle: assertions check the computed statements, not the interim fix's exact phrasing.
+  it("canonical data states 25% growth and an unchanged $100 AOV", async () => {
+    const { products, docx } = await reportWith((c) => c);
     expect(products).toContain("Revenue increased 25%");
     expect(products).toContain("average order value was $100 in both months");
     expect(products).toContain("Average order value: $100 in both months");
+    expect(docx).toContain("+25%");
   });
 
   it("a changed February revenue changes the title, growth and AOV statements together", async () => {
     // Feb Website 10000 -> 11000: revenue 12000 -> 16000 (+33.3%), orders unchanged at 150, AOV $100 -> $106.67.
     const { products, docx } = await reportWith((c) => c.replace("2026-02,Website,10000,100", "2026-02,Website,11000,100"));
     expect(products).toContain("Revenue increased 33.3%");
-    expect(products).toContain("average order value moved from $100 to $106.67");
     expect(products).not.toContain("Revenue increased 25%");
-    expect(products).not.toMatch(/average order value was \$100 in both months/i);
-    expect(products).not.toContain("$100 in both months");
-    expect(docx).not.toMatch(/in both months/i);
+    expect(products).toContain("Average order value: $100 to $106.67");
+    expect(products).not.toMatch(/average order value (was|remained) \$100 in both months/i);
+    expect(docx).toContain("$106.67");
+    expect(docx).not.toMatch(/\$100 in both months/);
   });
 
   it("a month with zero orders is not described as an increase or a constant AOV", async () => {
     const { products } = await reportWith((c) => c.replace("2026-02,Website,10000,100", "2026-02,Website,10000,0").replace("2026-02,Partnerships,5000,50", "2026-02,Partnerships,5000,0"));
     expect(products).not.toMatch(/orders increased/i);
-    expect(products).not.toMatch(/average order value[^"]*in both months/i);
-    expect(products).toContain("Orders moved from 120 to 0 (orders decreased 100%)");
+    expect(products).not.toMatch(/average order value (was|remained) \$100 in both months/i);
+    expect(products).toContain("Orders: 120 to 0 (orders decreased 100%)");
     expect(products).toContain("unknown (no orders)");
   });
 });

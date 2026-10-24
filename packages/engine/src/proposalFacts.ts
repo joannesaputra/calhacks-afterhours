@@ -7,6 +7,10 @@ export interface ProposalFacts {
   fee: string;
   durationWeeks: number | null;
   startDate: string | null;
+  /** Inclusive end of the engagement, calculated in code from start + duration; null when either is unknown. */
+  endDate: string | null;
+  /** Calendar keys ("november 22") of dates calculated here, allowed in content checks. */
+  derivedDates: string[];
   schedule: string;
   scopeItems: string[];
   objectives: string[];
@@ -106,6 +110,10 @@ export function extractProposalFacts(input: EngineInput, sources: SourceDocument
   })));
   if (starts.length > 1) questions.push(question("proposal_start_conflict", "Which engagement start date is authorized?", `The supplied sources contain conflicting start dates: ${starts.join(", ")}.`));
   const startDate = starts.length === 1 ? starts[0]! : null;
+  // A week-based engagement starting on day S ends on S + 7N - 1 (inclusive), computed on the civil calendar.
+  const startParts = startDate ? /^([A-Za-z]+) (\d{1,2}), (\d{4})$/.exec(startDate) : null;
+  const end = startParts && durationWeeks ? new Date(Date.UTC(Number(startParts[3]), MONTHS.indexOf(startParts[1]!.toLowerCase()), Number(startParts[2]) + durationWeeks * 7 - 1)) : null;
+  const endDate = end ? new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", day: "numeric", year: "numeric" }).format(end) : null;
   if (!startDate) unknowns.push("The engagement start date is not stated and must be confirmed.");
 
   const deadlines = [...new Set(resolveDeadlines(input.email.bodyText, input.email.receivedAt, tz).map((item) => item.dueAt))];
@@ -118,7 +126,11 @@ export function extractProposalFacts(input: EngineInput, sources: SourceDocument
   const scopeList = usesPackage ? listAfter(org, /\bincludes\s+(.+)$/i) : briefList;
   const briefScope = quote(brief, /\b(deliverables|scope)\b/i) ?? quote(email, /\b(deliverables|scope)\b/i);
   const wantList = listAfter(brief, /\bclient wants\s+(.+?)(?:\.|$)/i);
-  if (!briefScope && !wantList) questions.push(question("proposal_scope_missing", "What work and deliverables should the proposal cover?", "Neither the email nor a readable brief states the requested scope or deliverables."));
+  // A brief the email relies on must contain project facts; instruction-only or empty text is not a usable brief.
+  const briefHasFacts = briefClients.length > 0 || Boolean(wantList || briefList || quote(brief, money) || quote(brief, /\bweeks?\b/i) || quote(brief, /\b(deliverables|scope|objectives?|goals?)\b/i));
+  const briefUnusable = /\battach/i.test(input.email.bodyText) && Boolean(brief) && !briefHasFacts;
+  if (briefUnusable) questions.push(question("usable_project_brief", `Please provide a project brief with the client, objectives, deliverables, budget, and schedule; ${brief!.filename ?? "the attachment"} contains none of these.`, "The email asks for work based on the attached brief, but the attachment has no usable project information, so the proposal cannot be grounded in it."));
+  if (!briefUnusable && !briefScope && !wantList) questions.push(question("proposal_scope_missing", "What work and deliverables should the proposal cover?", "Neither the email nor a readable brief states the requested scope or deliverables."));
   const scopeItems = scopeList?.items ?? wantList?.items ?? [];
   if (!scopeItems.length && !questions.some((item) => item.id === "proposal_scope_missing")) questions.push(question("proposal_scope_missing", "Which deliverables should the proposal list?", "The scope could not be itemized from the supplied sources."));
   const exclusionList = listAfter(org, /\bexcludes\s+(.+)$/i);
@@ -127,10 +139,13 @@ export function extractProposalFacts(input: EngineInput, sources: SourceDocument
   if (!quote(brief, money) && feeKey) unknowns.push("The client brief does not restate the fee; it comes from the company's standard package.");
   unknowns.push("Payment milestones are not stated and remain to be agreed.");
 
-  const schedule = durationWeeks ? `${startDate ? `Starts ${startDate}` : "Start date to be confirmed"}; ${durationWeeks} calendar weeks` : startDate ? `Starts ${startDate}` : "Schedule to be confirmed";
+  const interval = startDate && endDate ? `${startDate.slice(0, -6)}${startDate.slice(-4) === endDate.slice(-4) ? "" : startDate.slice(-6)}-${endDate}` : null;
+  const schedule = interval ? `${interval} (${durationWeeks} calendar weeks)` : durationWeeks ? `${startDate ? `Starts ${startDate}` : "Start date to be confirmed"}; ${durationWeeks} calendar weeks` : startDate ? `Starts ${startDate}` : "Schedule to be confirmed";
+  if (endDate) unknowns.unshift(`The end date (${endDate}) is calculated as ${durationWeeks} calendar weeks from the stated start, inclusive; confirm it with the client.`);
   return {
     client: clients.length === 1 ? clients[0]! : "Client",
-    fee, durationWeeks, startDate, schedule,
+    fee, durationWeeks, startDate, endDate, schedule,
+    derivedDates: endDate ? [endDate.toLowerCase().replace(/,.*$/, "")] : [],
     scopeItems, objectives: wantList?.items ?? scopeItems, exclusions: exclusionList?.items ?? [],
     constraints: constraints?.quote ?? null,
     unknowns, questions, warnings,
