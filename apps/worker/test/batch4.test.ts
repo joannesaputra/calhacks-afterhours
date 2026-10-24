@@ -134,11 +134,11 @@ describe("live model wiring: no fixture fallback", () => {
     return { ...m, taskId };
   };
 
-  it("anthropic -> MODEL_PROVIDER_UNSUPPORTED; openai without key or model -> MODEL_NOT_CONFIGURED; engine never called", async () => {
+  it("Claude without key or model, or any other provider -> MODEL_NOT_CONFIGURED; engine never called", async () => {
     for (const [env, code] of [
-      [{ MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k" }, "MODEL_PROVIDER_UNSUPPORTED"],
-      [{ MODEL_PROVIDER: "openai", MODEL_NAME: "m" }, "MODEL_NOT_CONFIGURED"],
-      [{ MODEL_PROVIDER: "openai", OPENAI_API_KEY: "k" }, "MODEL_NOT_CONFIGURED"],
+      [{ MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k" }, "MODEL_NOT_CONFIGURED"],
+      [{ MODEL_PROVIDER: "anthropic", MODEL_NAME: "m" }, "MODEL_NOT_CONFIGURED"],
+      [{ MODEL_PROVIDER: "fixture", ANTHROPIC_API_KEY: "k", MODEL_NAME: "m" }, "MODEL_NOT_CONFIGURED"],
     ] as const) {
       const m = await liveTask(env);
       expect(m.engineCalls).toHaveLength(0);
@@ -148,16 +148,16 @@ describe("live model wiring: no fixture fallback", () => {
     }
   });
 
-  it("configured live task reaches the engine with mode=live (engine mocked)", async () => {
-    const m = await liveTask({ MODEL_PROVIDER: "openai", OPENAI_API_KEY: "k", MODEL_NAME: "model-x" });
+  it("configured Claude (anthropic) live task reaches the engine with mode=live (engine mocked)", async () => {
+    const m = await liveTask({ MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k", MODEL_NAME: "claude-x" });
     expect(m.engineCalls).toHaveLength(1);
     expect(m.engineCalls[0]!.mode).toBe("live");
     expect(getTaskSummary(m.db, m.taskId).status).toBe("ready");
   });
 
   it("engine/provider error text is redacted before it is stored", async () => {
-    const m = await liveTask({ MODEL_PROVIDER: "openai", OPENAI_API_KEY: "k", MODEL_NAME: "x" }, async () => {
-      throw Object.assign(new Error("OpenAI said: invalid key sk-proj-ABCDEFGHIJKL1234 with Bearer abc.def.ghi"), { code: "MODEL_AUTHENTICATION", retryable: false });
+    const m = await liveTask({ MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k", MODEL_NAME: "x" }, async () => {
+      throw Object.assign(new Error("Anthropic said: invalid key sk-proj-ABCDEFGHIJKL1234 with Bearer abc.def.ghi"), { code: "MODEL_AUTHENTICATION", retryable: false });
     });
     const err = getTaskSummary(m.db, m.taskId).error!;
     expect(err.code).toBe("MODEL_AUTHENTICATION");
@@ -169,9 +169,9 @@ describe("live model wiring: no fixture fallback", () => {
     let calls = 0;
     const clock = { t: Date.now() };
     const m = make({
-      config: makeTestConfig({ GENERATION_MODE: "live", MODEL_PROVIDER: "openai", OPENAI_API_KEY: "k", MODEL_NAME: "x" }),
+      config: makeTestConfig({ GENERATION_MODE: "live", MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k", MODEL_NAME: "x" }),
       now: () => new Date(clock.t),
-      engine: async () => { calls++; throw Object.assign(new Error("OpenAI returned HTTP 503."), { code: "MODEL_PROVIDER", retryable: true }); },
+      engine: async () => { calls++; throw Object.assign(new Error("Anthropic returned HTTP 503."), { code: "MODEL_PROVIDER", retryable: true }); },
     });
     const taskId = injectTask(m.db, m.config, "outage", new Date(clock.t - 5000));
     await m.worker.processNextJob();
@@ -215,7 +215,7 @@ describe("mocked Gmail -> worker chain (platform wiring only)", () => {
       getAttachment: async () => Buffer.alloc(0),
     };
     const m = make({
-      config: makeTestConfig({ GENERATION_MODE: "live", MODEL_PROVIDER: "openai", OPENAI_API_KEY: "k", MODEL_NAME: "x" }),
+      config: makeTestConfig({ GENERATION_MODE: "live", MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k", MODEL_NAME: "x" }),
       gmail,
       now: () => new Date(now + 10_000),
       engine: async (i, d) => { await d.onProgress({ stage: "plan", message: "Planned", plan: testPlan() }); return readyResult(i); },

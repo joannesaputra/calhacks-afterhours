@@ -170,6 +170,14 @@ describe("tasks, review, downloads", () => {
     const integ = (await app.inject({ method: "GET", url: "/v1/integrations", headers: { cookie } })).json().data;
     expect(integ.model).toEqual({ mode: "live", provider: "anthropic", configured: false, model: null });
   });
+
+  it("reports Claude live mode as configured only with both the key and a model name", async () => {
+    await setup({ GENERATION_MODE: "live", MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "test-key", MODEL_NAME: "claude-test" });
+    const cookie = await login();
+    const integ = (await app.inject({ method: "GET", url: "/v1/integrations", headers: { cookie } })).json().data;
+    expect(integ.model).toEqual({ mode: "live", provider: "anthropic", configured: true, model: "claude-test" });
+    expect(JSON.stringify(integ)).not.toContain("test-key");
+  });
 });
 
 const GOOGLE = { GOOGLE_CLIENT_ID: "test-client.apps.example", GOOGLE_CLIENT_SECRET: "test-client-secret" };

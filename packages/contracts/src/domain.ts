@@ -252,7 +252,7 @@ export const IntegrationStatusSchema = z.object({
   }),
   model: z.object({
     mode: GenerationModeSchema,
-    provider: z.enum(["fixture", "openai", "anthropic"]),
+    provider: z.enum(["fixture", "anthropic"]),
     configured: z.boolean(),
     model: z.string().nullable(),
   }),

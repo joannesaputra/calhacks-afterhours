@@ -134,7 +134,7 @@ revision 2 ready.
 
 - Always: nothing beyond `pnpm setup:local` (generates `SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY`, `DEMO_CLI_TOKEN`,
   `APP_PASSWORD`).
-- Live model: `GENERATION_MODE=live`, `MODEL_PROVIDER`, `MODEL_NAME`, and `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
+- Live model: `GENERATION_MODE=live`, `MODEL_PROVIDER`, `MODEL_NAME`, and `ANTHROPIC_API_KEY` (`MODEL_PROVIDER=anthropic`; Claude is the only live provider).
 - Gmail: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (see runbook).
 - WhatsApp (only if eligible): `NOTIFICATION_CHANNEL=whatsapp`, `WHATSAPP_USE_CASE_ELIGIBLE`,
   `WHATSAPP_CUSTOMER_SERVICE_WINDOW_UNTIL`, `TWILIO_*`.

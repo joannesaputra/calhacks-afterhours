@@ -98,7 +98,7 @@ describe("worker job execution", () => {
 
   it("fails live mode without credentials with a typed configuration error, without calling the engine", async () => {
     let called = false;
-    const config = makeTestConfig({ GENERATION_MODE: "live", MODEL_PROVIDER: "openai" });
+    const config = makeTestConfig({ GENERATION_MODE: "live", MODEL_PROVIDER: "anthropic" });
     const { db, worker } = make(async () => { called = true; throw new Error("x"); }, { config });
     const taskId = injectTask(db, config, "k", new Date());
     await worker.processNextJob();

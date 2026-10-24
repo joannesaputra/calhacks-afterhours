@@ -162,10 +162,10 @@ describe("fixture pipeline", () => {
 
 describe("live configuration", () => {
   it("fails clearly without credentials and never falls back to fixtures", async () => {
-    const previous = { provider: process.env.MODEL_PROVIDER, model: process.env.MODEL_NAME, key: process.env.OPENAI_API_KEY };
-    delete process.env.MODEL_PROVIDER; delete process.env.MODEL_NAME; delete process.env.OPENAI_API_KEY;
+    const previous = { provider: process.env.MODEL_PROVIDER, model: process.env.MODEL_NAME, key: process.env.ANTHROPIC_API_KEY };
+    delete process.env.MODEL_PROVIDER; delete process.env.MODEL_NAME; delete process.env.ANTHROPIC_API_KEY;
     await expect(runWork(await inputFor("proposal", { mode: "live" }), deps())).rejects.toMatchObject({ code: "MODEL_CONFIGURATION", retryable: false });
-    process.env.MODEL_PROVIDER = previous.provider; process.env.MODEL_NAME = previous.model; process.env.OPENAI_API_KEY = previous.key;
+    process.env.MODEL_PROVIDER = previous.provider; process.env.MODEL_NAME = previous.model; process.env.ANTHROPIC_API_KEY = previous.key;
   });
 });
 

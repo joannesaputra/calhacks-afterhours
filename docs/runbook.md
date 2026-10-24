@@ -27,8 +27,9 @@ disagree). Never stop a process you did not start. Reloading a task page always 
 ## Modes — always disclosed in the UI and status endpoint
 
 - `GENERATION_MODE=fixture` (default): Person 2's fixture intelligence. Disclose as fixture output.
-- `GENERATION_MODE=live`: requires `MODEL_PROVIDER=openai`, `MODEL_NAME` and `OPENAI_API_KEY` (the engine implements
-  only OpenAI; `anthropic` fails with `MODEL_PROVIDER_UNSUPPORTED`). Anything missing → `GET /api/integrations` shows
+- `GENERATION_MODE=live`: requires `MODEL_PROVIDER=anthropic` (Claude is the only live provider), `MODEL_NAME` and
+  `ANTHROPIC_API_KEY`. The Claude path is covered by unit tests with a fake
+  `fetch`; it has **not** been run against the real API. Anything missing → `GET /api/integrations` shows
   `model.configured=false`, `pnpm check:ready` prints an INFO line, and live tasks fail nonretryably with
   `MODEL_NOT_CONFIGURED` before the engine runs. There is never a fixture fallback.
   Mode and the organization profile are snapshotted per task at ingestion; changing them affects only new tasks.

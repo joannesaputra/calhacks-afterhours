@@ -8,7 +8,7 @@ import { safeFilename, stableId } from "./ids";
 import { generateLive } from "./live";
 import { allAmbiguousAnswers, classify, makePlan, requestedSlideCount, unusableAnswers } from "./planning";
 import type { ModelClient, ModelLimits } from "./providers/model";
-import { openAIClientFromEnv } from "./providers/openai";
+import { liveClientFromEnv } from "./providers/env";
 import { renderDocx } from "./render/docx";
 import { renderPptx } from "./render/pptx";
 import { buildSources } from "./sources";
@@ -58,7 +58,7 @@ export async function execute(inputValue: EngineInput, deps: EngineDependencies,
   const emit = async (progress: EngineProgress) => { abortIfNeeded(signal); await deps.onProgress(progress); abortIfNeeded(signal); };
   abortIfNeeded(signal);
   // Resolve the live client before any work so missing configuration fails fast and never falls back to fixtures.
-  const client = input.mode === "live" ? (typeof options.modelClient === "function" ? options.modelClient() : options.modelClient ?? openAIClientFromEnv()) : null;
+  const client = input.mode === "live" ? (typeof options.modelClient === "function" ? options.modelClient() : options.modelClient ?? liveClientFromEnv()) : null;
   await emit({ stage: "extract", message: "Normalizing email, organization context, answers, and attachments." });
   const { sources, warnings } = buildSources(input, signal);
   for (const source of sources) if (source.kind !== "organization" && INSTRUCTION_LIKE.test(source.text)) warnings.push(`${source.title} contains instruction-like text; it was treated as data and did not change engine policy.`);
