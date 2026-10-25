@@ -70,6 +70,8 @@ Severity: **blocker** (stops the demo or corrupts data), **material** (wrong out
 | O5 | Source label "Calculated in code from Proposal and five-slide kickoff deck for Maple & Moss" names the email by its subject | polish (cosmetic, reported by Darren) | OPEN | proposal timeline block | unchanged: the email source title is its subject by contract; renaming touches UI chips and tests |
 | O6 | Chart labels show `$15.000` on this machine | not a defect | — | PowerPoint on an `en_ID` locale | the stored number format is `$#,##0`; Office applies the viewer's locale |
 
+| O7 | Live mode: an email with **no request text**, only a project brief attached, became a `ready` proposal (task `7744cb4d`). The brief describes the work, but nobody asked for it; the fixture pipeline would require a delegated assignment | material (product judgement) | OPEN | send an attachment-only email with the brief in live mode | suggested: in `liveSpec.ts` / `live.ts`, require an explicit request in the email or answers, otherwise `needs_input`; add a test; one live re-check. Owner: Joanne |
+
 No blocker was found.
 
 ## Evidence by area

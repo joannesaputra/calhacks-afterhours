@@ -91,6 +91,36 @@ OAuth connection verified; one real email reached the queue. This is not Gmail �
 - Afterwards: Automation off, `GENERATION_MODE=fixture` in `.env`. Cosmetic: the DOCX subtitle and the standard
   "Prepared by … internal review" line say nearly the same thing.
 
+## Full live check with the real worker (2026-10-24, code `dbb37fe`, authorized by Joanne)
+
+Re-checks first: `pnpm test:e2e` 25 passed + 1 explained skip (after stopping the audit's own web server, which blocked a
+second `next dev`); QA harness 53/53. Joanne opened the live proposal DOCX in Word and reported every page clean (Word's
+scripting refuses PDF export on this Mac, so this page check is human, not automated).
+
+Then `GENERATION_MODE=live`, the normal worker (`pnpm dev:worker`, polls Gmail every 15 s **and** generates), Automation on,
+one approved sender. Joanne's self-sent emails arrived without subject or body text, each carrying fixture files only
+(sent from Finder), which made them adversarial cases:
+
+| Email (as received) | Task | Outcome | Claude usage |
+|---|---|---|---|
+| no text; `sales.csv` + `maple-and-moss-brief.md` + `prompt-injection.txt` | `85d0938b` | `needs_input`: which deliverables, whether the CSV is a usable baseline, start date | 1 call, 5,843 / 1,242 |
+| no text; `maple-and-moss-brief.md` only | `7744cb4d` | `ready`: proposal + deck from the brief | 1 call, 4,983 / 2,794 |
+| no text; `sales.csv` only | `01b1ae6e` | `needs_input`: deliverables, purpose/owner, proposal scope | 1 call, 5,278 / 927 |
+| no text; `prompt-injection.txt` only | `97ecc354` | `skipped`; no instruction followed | 1 call, 4,748 / 517 |
+| answers to `01b1ae6e` in the UI (report + 5-slide deck, internal, fictional data) | `01b1ae6e` r2 | `ready` | 1 call, 5,899 / 4,944 |
+
+All calls: one generate call each, no repair, no retry. Notifications: 3 `simulated`. No email or message sent.
+
+Report check (`01b1ae6e` r2, files in gitignored `var/final-audit/live-gmail/report/`): revenue USD 12,000 → 15,000
+(+3,000, 25%), orders 120 → 150 (+30), AOV USD 100 both months, Website 66.7% / Partnerships 33.3% both months, channel
+values 8,000/10,000 and 4,000/5,000: all equal to the CSV. Answer history kept (3 rows). Five slide parts; all 5 rendered
+in PowerPoint (native two-series chart, no overflow). Finding: the attachment-only brief (`7744cb4d`) produced a
+proposal without any request in the email; see audit O7.
+
+Persistence: marked `01b1ae6e` reviewed, stopped the worker, restarted the API: status `approved` and "Marked reviewed"
+still shown; the task keeps its `live` label while the app shows Fixture mode (snapshot). Afterwards: Automation off,
+`GENERATION_MODE=fixture`, worker stopped (heartbeat stale), Gmail still connected.
+
 ## Gmail setup for Darren (no secrets here)
 
 1. Google Cloud project → enable **Gmail API**.
