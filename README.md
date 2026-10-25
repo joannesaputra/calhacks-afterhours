@@ -23,8 +23,8 @@ are frozen; propose changes in [docs/contract-change-requests.md](docs/contract-
 | `apps/worker` | Person 1 | Long-running worker: Gmail polling, job queue, notification outbox. |
 | `packages/contracts` | Person 1 | Zod schemas + inferred types shared by everyone. |
 | `packages/data` | Person 1 | SQLite (better-sqlite3) repository, migrations, Gmail adapter. |
-| `packages/engine` | Person 2 | `runWork` — fixture planning, real CSV calculation, grounded content, real DOCX/PPTX; Claude (Anthropic) live path (never exercised live here). |
-| `packages/delivery` | Person 3 | `sendNotification` / `composeNotification`. **Foundation stub:** outbox is simulated; there is no WhatsApp/Twilio adapter (live sends are always blocked). |
+| `packages/engine` | Person 2 | `runWork` — fixture planning, real CSV calculation, grounded content, real DOCX/PPTX; Claude (Anthropic) live path, verified with real Gmail emails (proposal, report, clarification, skip; see `docs/audits/final/integration.md`). |
+| `packages/delivery` | Person 3 | `sendNotification` / `composeNotification`. Outbox (simulated) by default; a Twilio WhatsApp adapter with eligibility gates is implemented and unit-tested, but a real WhatsApp send has not been tested. |
 | `fixtures/**` | Person 2 | Fictional demo inputs. |
 
 ### Package strategy
@@ -52,10 +52,12 @@ pnpm demo:proposal    # in another terminal: real HTTP POST to the demo endpoint
 
 Log in at http://localhost:3000 with `APP_PASSWORD` from `.env`.
 
-The release candidate includes the real engine (fixture intelligence, no model calls) and the SpaceXAI-style web UI: a demo
-proposal or report becomes a real DOCX and PPTX. What is real, simulated or blocked is listed in
-[docs/release/capability-matrix.md](docs/release/capability-matrix.md); the exact candidate is in
-[docs/release/candidate.md](docs/release/candidate.md).
+The app runs in fixture mode by default (no model calls): a demo proposal or report becomes a real DOCX and PPTX in the
+SpaceXAI-style web UI. With `GENERATION_MODE=live` and an Anthropic key it uses Claude; with a Google OAuth client it reads
+new mail from approved senders in a connected Gmail inbox. The current record of what was tested live, what is simulated and
+what is untested is [docs/audits/final/integration.md](docs/audits/final/integration.md) (findings and evidence:
+[docs/audits/final/audit.md](docs/audits/final/audit.md)). Older batch records such as
+[docs/release/capability-matrix.md](docs/release/capability-matrix.md) are kept as history.
 
 ## Commands
 
