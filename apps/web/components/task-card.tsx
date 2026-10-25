@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowRight, TriangleAlert } from "lucide-react";
 import type { TaskSummary } from "@afterhours/contracts";
 import { describeError } from "@/lib/api";
-import { formatElapsed, formatRelative, truncate } from "@/lib/format";
+import { formatElapsed, formatRelative } from "@/lib/format";
 import { OUTPUT_LABEL, STAGE_LABEL, isActive, isConfigError } from "@/lib/labels";
 import { useNow, useRetry, useTask } from "@/lib/hooks";
 import { GenerationBadge, IngestionBadge, StatusBadge } from "./badges";
@@ -70,7 +70,6 @@ export function TaskCard({ task, nowMs }: { task: TaskSummary; nowMs: number }) 
         <span className="wrap-anywhere">From {task.senderName ? `${task.senderName} <${task.senderEmail}>` : task.senderEmail}</span>
         <span className="muted" title="When the original email was sent (taken from the email itself)"> · sent {formatRelative(task.receivedAt, nowMs)}</span>
       </p>
-      <p className="card-subject wrap-anywhere">{truncate(task.subject, 140)}</p>
       <div className="chips">
         <IngestionBadge mode={task.ingestionMode} />
         <GenerationBadge mode={task.generationMode} />
