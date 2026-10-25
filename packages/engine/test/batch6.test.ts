@@ -34,8 +34,8 @@ describe("Batch 6 report variation", () => {
     const result = await runWork(await inputFor("report"), deps());
     if (result.outcome !== "ready") throw new Error("expected ready");
     const deck = JSON.stringify(result.products.find((product) => product.kind === "presentation"));
-    expect(deck).toContain("Average order value held at $100 in both months");
-    expect(deck).toContain("Website kept 66.7% of revenue in both months");
+    expect(deck).toContain("while average order value stayed at $100");
+    expect(deck).toContain("the mix held steady: Website still accounts for 66.7% of revenue");
     expect(deck).not.toContain("$100 to $100");
   }, 20_000);
 

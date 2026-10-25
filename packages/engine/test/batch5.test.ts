@@ -249,7 +249,7 @@ describe("material commitments", () => {
     expect(docx).toContain("Assumptions and open items; confirm before any agreement.");
     expect(docx).toContain("Payment milestones are not stated and remain to be agreed.");
     const slide5 = new TextDecoder().decode(unzip(result.files.find((file) => file.format === "pptx")!.bytes).get("ppt/slides/slide5.xml")!);
-    expect(slide5).toContain("RECOMMENDATION");
+    expect(slide5).toContain("Recommendation");
   }, 20_000);
 });
 

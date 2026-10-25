@@ -40,7 +40,6 @@ describe("report: a month with no revenue", () => {
     const all = allText(await ready(await zeroJanuary()));
     expect(all).toContain("January 2026 had no recorded revenue, so no channel shares are defined for it; Website represented 66.7% of revenue in February 2026.");
     expect(all).toContain("revenue rose from zero, so no percent change is defined");
-    expect(all).toContain("not defined (no revenue that month) to 66.7%");
     expect(all).not.toMatch(/0% of revenue in January|increased not computable|Website share of revenue: 0%/);
   });
 
@@ -145,14 +144,14 @@ describe("sales dashboard (template layout): report page 1 and the deck cover, b
     const docx = result.files.find((file) => file.format === "docx")!.bytes;
     const pptx = result.files.find((file) => file.format === "pptx")!.bytes;
     const doc = part(docx, "word/document.xml");
-    expect(doc).toContain("Report Time Frame");
-    expect(doc.indexOf("Report Time Frame")).toBeLessThan(doc.indexOf("Executive summary"));
+    expect(doc).toContain("Report time frame");
+    expect(doc.indexOf("Report time frame")).toBeLessThan(doc.indexOf("Executive summary"));
     expect(doc).toMatch(/\$15,000[\s\S]*▲ \+25%/);
     expect(text(unzip(docx).get("word/document.xml")!)).toContain('w:type="page"');
     const slides = [...unzip(pptx).keys()].filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
     expect(slides).toHaveLength(5);
     const cover = part(pptx, "ppt/slides/slide1.xml");
-    for (const expected of ["Report Time Frame", "February 2026", "$15,000", "▲ +25%", "Website", "66.7%"]) expect(cover).toContain(expected);
+    for (const expected of ["Report time frame", "February 2026", "$15,000", "▲ +25%", "Website", "66.7%"]) expect(cover).toContain(expected);
     // Cover line + doughnut, the revenue chart, then code-built: channel bars (slide 3) and the orders area chart (slide 4).
     expect([...unzip(pptx).keys()].filter((name) => /^ppt\/charts\/chart\d+\.xml$/.test(name))).toHaveLength(5);
   });
@@ -161,7 +160,7 @@ describe("sales dashboard (template layout): report page 1 and the deck cover, b
     const result = await ready(await inputFor("proposal"));
     for (const file of result.files) {
       const parts = [...unzip(file.bytes)].filter(([name]) => /^(word\/document|ppt\/slides\/slide\d+)\.xml$/.test(name));
-      expect(parts.map(([, bytes]) => text(bytes)).join(" ")).not.toContain("Report Time Frame");
+      expect(parts.map(([, bytes]) => text(bytes)).join(" ")).not.toMatch(/Report time frame/i);
     }
   });
 });
@@ -188,7 +187,7 @@ describe("fuller slides: chart bands from calculated data and card layouts, with
     return [...rels.matchAll(/charts\/(chart\d+\.xml)/g)].map((match) => text(unzip(bytes).get(`ppt/charts/${match[1]}`)!));
   };
 
-  it("sales deck: varied visuals - horizontal channel bars, an orders area chart with order-value tiles, numbered next-step cards", async () => {
+  it("sales deck: varied visuals - horizontal channel bars, an orders area chart with order-value tiles, unnumbered recommendation cards", async () => {
     const result = await ready(await inputFor("report"));
     const pptx = result.files.find((file) => file.format === "pptx")!.bytes;
     const channel = chartOf(pptx, 3).join("");
@@ -202,7 +201,11 @@ describe("fuller slides: chart bands from calculated data and card layouts, with
     expect(ordersText).toMatch(/Average order value[\s\S]*January[\s\S]*\$100[\s\S]*February[\s\S]*\$100[\s\S]*No change/);
     const closing = slideXml(pptx, 5);
     expect(closing.match(/prstGeom prst="roundRect"/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
-    expect(closing.replace(/<[^>]+>/g, " ")).toMatch(/\b1\b[\s\S]*Treat the change as an observation, not proof of campaign impact/);
+    const closingText = closing.replace(/<[^>]+>/g, " ");
+    expect(closingText).toContain("What to measure next");
+    expect(closingText).toContain("Compare channel results each month.");
+    expect(closingText).toContain("Two months show a change, not its cause.");
+    expect(closing).not.toContain('prst="ellipse"');
     // The structured content behind previews is unchanged: one chart block, the revenue chart.
     const blocks = result.products.flatMap((product) => [...product.blocks, ...product.slides.flatMap((slide) => slide.blocks)]);
     expect(blocks.filter((block) => block.chart).every((block) => block.chart!.series[0]!.values.join() === "12000,15000")).toBe(true);

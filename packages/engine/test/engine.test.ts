@@ -243,8 +243,8 @@ describe("report narrative follows the computed data, not the canonical sample (
     const { products, docx } = await reportWith((c) => c);
     expect(products).toContain("Revenue increased 25%");
     expect(products).toContain("average order value was $100 in both months");
-    expect(products).toContain("Average order value held at $100 in both months");
-    expect(products).toContain("The change came from more orders, not from order size");
+    expect(products).toContain("Orders rose from 120 to 150, while average order value stayed at $100.");
+    expect(products).toContain("More orders, same average spend");
     expect(docx).toContain("+25%");
   });
 
@@ -253,9 +253,9 @@ describe("report narrative follows the computed data, not the canonical sample (
     const { products, docx } = await reportWith((c) => c.replace("2026-02,Website,10000,100", "2026-02,Website,11000,100"));
     expect(products).toContain("Revenue increased 33.3%");
     expect(products).not.toContain("Revenue increased 25%");
-    expect(products).toContain("Average order value moved from $100 to $106.67");
-    expect(products).not.toMatch(/average order value (was|remained|held at) \$100 in both months/i);
-    expect(products).not.toContain("came from more orders");
+    expect(products).toContain("while average order value moved from $100 to $106.67");
+    expect(products).toContain("More orders, higher average spend");
+    expect(products).not.toMatch(/average order value (was|remained|held at|stayed at) \$100/i);
     expect(docx).toContain("$106.67");
     expect(docx).not.toMatch(/\$100 in both months/);
   });
@@ -263,8 +263,9 @@ describe("report narrative follows the computed data, not the canonical sample (
   it("a month with zero orders is not described as an increase or a constant AOV", async () => {
     const { products } = await reportWith((c) => c.replace("2026-02,Website,10000,100", "2026-02,Website,10000,0").replace("2026-02,Partnerships,5000,50", "2026-02,Partnerships,5000,0"));
     expect(products).not.toMatch(/orders increased/i);
-    expect(products).not.toMatch(/average order value (was|remained|held at) \$100 in both months/i);
-    expect(products).toContain("Orders fell 100%, from 120 to 0");
+    expect(products).not.toMatch(/average order value (was|remained|held at|stayed at) \$100/i);
+    expect(products).toContain("Orders fell from 120 to 0, so average order value is unknown (no orders) for February 2026.");
+    expect(products).toContain("No orders this month");
     expect(products).toContain("unknown (no orders)");
   });
 });

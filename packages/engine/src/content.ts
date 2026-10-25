@@ -105,11 +105,6 @@ function change(value: number | null, delta: number, noun: string): string {
   return `${noun} ${delta > 0 ? "increased" : "decreased"} ${pctText(value)}`;
 }
 
-/** A channel's share of a month's revenue; a month with no revenue has no shares. */
-const shareText = (value: number | null) => value === null ? "not defined (no revenue that month)" : `${value}%`;
-
-/** "A to B", or "A in both months" when unchanged. */
-const span = (from: string, to: string) => from === to ? `${from} in both months` : `${from} to ${to}`;
 
 function shareSentence(channel: SalesMetrics["channels"][number], month1: string, label1: string, month2: string, label2: string): string {
   const [s1, s2] = [channel.sharePercent[month1] ?? null, channel.sharePercent[month2] ?? null];
@@ -153,53 +148,47 @@ export function reportProducts(input: EngineInput, sources: SourceDocument[], pl
     bullets(`${productId}-recommend`, "Recommended next steps", ["Continue monthly revenue and order tracking by channel.", "Add campaign cost and exposure fields before evaluating marketing efficiency.", "Document returns and margin definitions before profit analysis."], "recommendation"),
   ];
   const deckId = stableId(input.taskId, input.revision, "presentation", 0);
-  // Deck bullets lead with the takeaway: the movement first, then what it means for the mix.
-  const movement = (from: number, to: number, growth: number | null) => {
-    const values = `${usd(from)} → ${usd(to)}`;
-    if (from === to) return `${values} (unchanged)`;
-    if (growth === null) return `${values} (new revenue this month)`;
-    return `${values} (${growth > 0 ? "up" : "down"} ${pctText(growth)})`;
-  };
-  const shareMove = (channel: SalesMetrics["channels"][number]) => {
-    const [s1, s2] = [channel.sharePercent[first!.month] ?? null, channel.sharePercent[second!.month] ?? null];
-    if (s1 === null || s2 === null) return null;
-    return s1 === s2 ? `Share held steady from ${m1}` : `Share ${s2 > s1 ? "rose" : "fell"} from ${s1}% in ${m1}`;
-  };
+  // Deck slides state the takeaway in the title and add one short observation; the charts carry the values.
+  const growths = byRevenue.map((channel) => channel.growthPercent);
+  const sameGrowth = growths.every((growth) => growth !== null && growth === growths[0]);
+  const allUp = byRevenue.every((channel) => channel.values[second!.month]! > channel.values[first!.month]!);
+  const allDown = byRevenue.every((channel) => channel.values[second!.month]! < channel.values[first!.month]!);
+  const group = byRevenue.length === 2 ? "Both channels" : `All ${byRevenue.length} channels`;
+  const channelTitle = sameGrowth && growths[0]! !== 0 ? `${group} ${growths[0]! > 0 ? "grew" : "fell"} ${pctText(growths[0]!)}`
+    : allUp ? `${group} grew` : allDown ? `${group} declined`
+    : byRevenue.every((channel) => channel.values[second!.month] === channel.values[first!.month]) ? "Channel revenue held steady"
+    : "Channels moved in different directions";
+  const [topS1, topS2] = [top.sharePercent[first!.month] ?? null, top.sharePercent[second!.month] ?? null];
+  const channelNote = topTied ? `Several channels tied for the largest share of revenue in ${m2}; the chart shows each channel.`
+    : topS1 === null || topS2 === null ? shareSentence(top, first!.month, m1, second!.month, m2)
+    : topS1 === topS2 ? `${sameGrowth && byRevenue.length > 1 ? `${group} grew at the same rate, so the` : "The"} mix held steady: ${top.channel} still accounts for ${topS2}% of revenue.`
+    : `${top.channel} now accounts for ${topS2}% of revenue, ${topS2 > topS1 ? "up" : "down"} from ${topS1}% in ${m1}.`;
   const channelBlocks: ContentBlock[] = metrics.channels.length <= 2
-    ? byRevenue.map((channel, index) => {
-      const share = channel.sharePercent[second!.month] ?? null;
-      const moved = shareMove(channel);
-      return bullets(`${deckId}-3${index}`, channel.channel, [
-        movement(channel.values[first!.month]!, channel.values[second!.month]!, channel.growthPercent),
-        share === null ? `No revenue recorded in ${m2}` : `${share}% of ${m2} revenue`,
-        ...(moved ? [moved] : []),
-      ], "calculated", dataRef);
-    })
-    : [table(`${deckId}-3t`, metrics.channels.length > 6 ? "Revenue by channel (largest six; all in the report)" : "Revenue by channel", ["Channel", m1, m2], byRevenue.slice(0, 6).map((channel) => [channel.channel, usd(channel.values[first!.month]!), usd(channel.values[second!.month]!)]), "calculated", dataRef)];
+    ? [paragraph(`${deckId}-3a`, null, channelNote, "calculated", dataRef)]    : [table(`${deckId}-3t`, metrics.channels.length > 6 ? "Revenue by channel (largest six; all in the report)" : "Revenue by channel", ["Channel", m1, m2], byRevenue.slice(0, 6).map((channel) => [channel.channel, usd(channel.values[first!.month]!), usd(channel.values[second!.month]!)]), "calculated", dataRef)];
   const revenueTitle = change(metrics.revenueGrowthPercent, metrics.revenueChangeMinor, "Revenue");
-  function orderBullets(): string[] {
+  function ordersTitle(): string {
     const [o1, o2] = [first!.orders, second!.orders];
-    const ordersLine = o1 === o2 ? `Orders held at ${o2} in both months`
-      : metrics.orderGrowthPercent === null ? `Orders rose from zero to ${o2}`
-      : `Orders ${o2 > o1 ? "grew" : "fell"} ${pctText(metrics.orderGrowthPercent)}, from ${o1} to ${o2}`;
     const [a1, a2] = [first!.averageOrderValueMinor, second!.averageOrderValueMinor];
-    const aovLine = a1 !== null && a1 === a2 ? `Average order value held at ${aov(a1)} in both months` : `Average order value moved from ${aov(a1)} to ${aov(a2)}`;
-    // Revenue = orders x average order value, so with a constant order value the change is all in order count.
-    const insight = a1 !== null && a1 === a2 && o1 !== o2 ? [`The change came from ${o2 > o1 ? "more" : "fewer"} orders, not from order size`] : [];
-    const s1 = top.sharePercent[first!.month] ?? null;
-    const s2 = top.sharePercent[second!.month] ?? null;
-    const shareLine = topTied ? "Several channels tied for the largest revenue share"
-      : s1 !== null && s1 === s2 ? `${top.channel} kept ${s2}% of revenue in both months`
-      : s1 !== null && s2 !== null ? `${top.channel} share moved from ${s1}% to ${s2}%`
-      : `${top.channel} share: ${span(shareText(s1), shareText(s2))}`;
-    return [ordersLine, aovLine, ...insight, shareLine];
+    if (o2 === 0) return "No orders this month";
+    const orders = o2 > o1 ? "More orders" : o2 < o1 ? "Fewer orders" : "Same number of orders";
+    if (a1 === null || a2 === null) return orders;
+    if (a1 === a2) return o1 === o2 ? "Orders and average spend held steady" : `${orders}, same average spend`;
+    return `${orders}, ${a2 > a1 ? "higher" : "lower"} average spend`;
+  }
+  function ordersNote(): string {
+    const [o1, o2] = [first!.orders, second!.orders];
+    const [a1, a2] = [first!.averageOrderValueMinor, second!.averageOrderValueMinor];
+    const orders = o1 === o2 ? `Orders held at ${o2}` : `Orders ${o2 > o1 ? "rose" : "fell"} from ${o1} to ${o2}`;
+    if (a2 === null) return `${orders}, so average order value is unknown (no orders) for ${m2}.`;
+    if (a1 === null) return `${orders}; average order value was unknown (no orders) in ${m1} and is ${aov(a2)} in ${m2}.`;
+    return `${orders}, while average order value ${a1 === a2 ? `stayed at ${aov(a2)}` : `moved from ${aov(a1)} to ${aov(a2)}`}.`;
   }
   const slides: SlideContent[] = [
     slide(`${deckId}-1`, `${period} sales update`, "title", [paragraph(`${deckId}-1a`, "Dataset scope", `Revenue and orders by channel: ${sentenceList(byRevenue.slice(0, 4).map((channel) => channel.channel), true)}${byRevenue.length > 4 ? ", and others" : ""}`, "calculated", dataRef)], "All values are calculated in code from the attached CSV."),
     slide(`${deckId}-2`, revenueTitle, "chart", [{ ...chart, id: `${deckId}-2a` }], `${revenueLine} Causality is not established.`),
-    slide(`${deckId}-3`, "Channel performance", metrics.channels.length === 2 ? "two_column" : "bullets", channelBlocks, metrics.channels.length > 6 ? "Only the six largest channels are shown; the report lists every channel." : "Values are channel revenue sums from the CSV."),
-    slide(`${deckId}-4`, "Orders and order value", "bullets", [bullets(`${deckId}-4a`, "What changed", orderBullets(), "calculated", dataRef)], "Average order value is revenue divided by orders for each month."),
-    slide(`${deckId}-5`, "Limits and next steps", "closing", [bullets(`${deckId}-5a`, "How to use these numbers", ["Treat the change as an observation, not proof of campaign impact", "Add campaign cost and reach data to judge efficiency", "Track margins and returns before drawing financial conclusions", "Review each channel monthly to confirm the trend"], "recommendation")], "ROAS, CAC, profit, retention, and conversion are not computable from this dataset."),
+    slide(`${deckId}-3`, metrics.channels.length <= 2 ? channelTitle : "Revenue by channel", "bullets", channelBlocks, metrics.channels.length > 6 ? "Only the six largest channels are shown; the report lists every channel." : "Values are channel revenue sums from the CSV."),
+    slide(`${deckId}-4`, ordersTitle(), "bullets", [paragraph(`${deckId}-4a`, null, ordersNote(), "calculated", dataRef)], "Average order value is revenue divided by orders for each month."),
+    slide(`${deckId}-5`, "What to measure next", "closing", [bullets(`${deckId}-5a`, null, ["Compare channel results each month.", "Add campaign cost and reach data before judging efficiency.", "Track margins and returns before drawing financial conclusions.", "Two months show a change, not its cause."], "recommendation")], "ROAS, CAC, profit, retention, and conversion are not computable from this dataset."),
   ];
   return [
     { id: productId, kind: "report", title: `${period} Sales Performance Report`, subtitle: "Calculated from the supplied CSV", blocks, slides: [], assumptions: plan.assumptions, warnings: [] },

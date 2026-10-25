@@ -10,7 +10,13 @@ import { columnWidths } from "./docx";
 const BODY = "334E68";
 const MUTED = "627D98";
 const hex = (value: string) => value.replace(/^#/, "").toUpperCase();
-const PARA_SPACE = 8;
+const PARA_SPACE = 10;
+/** Body line spacing; layout.ts budgets for it (LINE), so fitted text still fits. */
+export const LINE_SPACING = 1.1;
+const basisLabel = (block: ContentBlock) => (block.basis === "recommendation" ? "Recommendation" : "Assumption to confirm");
+/** "Label: value" items read better as aligned lines than as bullets. */
+const PAIR = /^([^:]{2,32}):\s+(.+)$/;
+const pairs = (block: ContentBlock) => (block.kind === "bullets" && block.items.length >= 2 && block.items.every((item) => PAIR.test(item)) ? block.items.map((item) => item.match(PAIR)!.slice(1, 3) as [string, string]) : null);
 
 function basisLine(slide: SlideContent): string {
   const labels = new Set<string>();
@@ -39,7 +45,7 @@ function addBlock(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideContent
     const size = fitFont([block.heading], box.w, headingH + 0.1, [19, 17, 16], 0) ?? 16;
     slide.addText(officeText(block.heading), { x: box.x, y: box.y, w: box.w, h: headingH, fontFace: font, fontSize: size, bold: true, color: primary, margin: 0, valign: "top" });
   }
-  if (labelled) slide.addText(block.basis === "recommendation" ? "RECOMMENDATION" : "ASSUMPTION", { x: box.x, y: box.y + (block.heading ? headingH : 0), w: box.w, h: labelH - 0.05, fontFace: font, fontSize: 11, bold: true, color: hex(organization.brand.accentColor), margin: 0, charSpacing: 1 });
+  if (labelled) slide.addText(basisLabel(block), { x: box.x, y: box.y + (block.heading ? headingH : 0), w: box.w, h: labelH - 0.05, fontFace: font, fontSize: 12, color: hex(organization.brand.accentColor), margin: 0 });
   const body = bodyBox(block, box, labelled);
   if (block.kind === "chart" && block.chart) {
     const chart = block.chart;
@@ -67,8 +73,17 @@ function addBlock(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideContent
   }
   const paragraphs = blockParagraphs(block);
   const size = fitFont(paragraphs, body.w, body.h, bodySteps(content.layout), PARA_SPACE) ?? MIN_BODY_PT;
+  const lines = pairs(block);
+  if (lines) {
+    const labelW = Math.min(body.w * 0.4, 2.8);
+    slide.addTable(lines.map(([label, value]) => [
+      { text: officeText(label), options: { color: MUTED } },
+      { text: officeText(value), options: { color: BODY } },
+    ]), { x: body.x, y: body.y, w: body.w, colW: [labelW, body.w - labelW], fontFace: font, fontSize: size, border: { type: "none" }, margin: [0.04, 0.08, 0.1, 0], valign: "top", autoPage: false });
+    return;
+  }
   const runs = paragraphs.map((text) => ({ text: officeText(text), options: { bullet: block.kind === "bullets" ? { indent: 18 } : false, breakLine: true } }));
-  slide.addText(runs, { x: body.x, y: body.y, w: body.w, h: body.h, fontFace: font, fontSize: size, color: BODY, margin: 0.08, valign: content.layout === "title" ? "middle" : "top", paraSpaceAfter: PARA_SPACE });
+  slide.addText(runs, { x: body.x, y: body.y, w: body.w, h: body.h, fontFace: font, fontSize: size, color: BODY, margin: 0.08, valign: content.layout === "title" ? "middle" : "top", paraSpaceAfter: PARA_SPACE, lineSpacingMultiple: LINE_SPACING });
 }
 
 const DARK = "3A3A3A";
@@ -82,7 +97,7 @@ function addDashboard(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideCon
   const primary = hex(organization.brand.primaryColor);
   slide.addShape(pptx.ShapeType.roundRect, { x: 0.5, y: 0.35, w: 7.6, h: 0.55, rectRadius: 0.27, fill: { color: DARK }, line: { color: DARK } });
   slide.addText([
-    { text: "Report Time Frame  |  ", options: { bold: true } },
+    { text: "Report time frame  |  " },
     { text: `${officeText(dashboard.timeFrame)} `, options: { bold: true } },
     { text: `(Comparing to ${officeText(dashboard.comparison)})`, options: { italic: true, color: "D9D9D9" } },
   ], { x: 0.75, y: 0.35, w: 7.2, h: 0.55, fontFace: font, fontSize: 14, color: "FFFFFF", margin: 0, valign: "middle" });
@@ -101,7 +116,7 @@ function addDashboard(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideCon
     slide.addShape(pptx.ShapeType.line, { x, y: 2.05, w: tileW, h: 0, line: { color: RULE, width: 1 } });
     slide.addText(officeText(kpi.label), { x, y: 2.12, w: tileW, h: 0.32, fontFace: font, fontSize: fitFont([kpi.label], tileW, 0.32, [13, 12, 11], 0) ?? 11, color: MUTED, margin: 0 });
     slide.addText(officeText(kpi.value), { x, y: 2.44, w: tileW, h: 0.56, fontFace: font, fontSize: 26, bold: true, color: DARK, margin: 0, valign: "middle" });
-    slide.addText(`${arrow(kpi.direction)}${officeText(kpi.change)}`, { x, y: 3.0, w: tileW, h: 0.3, fontFace: font, fontSize: 13, bold: true, color: trendColor(kpi.direction), margin: 0 });
+    slide.addText(`${arrow(kpi.direction)}${officeText(kpi.change)}`, { x, y: 3.0, w: tileW, h: 0.3, fontFace: font, fontSize: 13, color: trendColor(kpi.direction), margin: 0 });
     slide.addShape(pptx.ShapeType.line, { x, y: 3.38, w: tileW, h: 0, line: { color: RULE, width: 1 } });
   });
   slide.addText(officeText(dashboard.question), { x: SLIDE.x, y: 3.5, w: SLIDE.w, h: 0.42, fontFace: font, fontSize: 17, bold: true, color: DARK, margin: 0, valign: "middle" });
@@ -129,9 +144,9 @@ function addDashboard(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideCon
   const rowH = Math.min(0.44, 2.3 / Math.max(dashboard.channels.length, 1));
   dashboard.channels.forEach((channel, index) => {
     const y = 4.38 + index * rowH;
-    slide.addText(officeText(channel.name), { x: listX, y, w: 1.65, h: rowH, fontFace: font, fontSize: fitFont([channel.name], 1.65, rowH, [14, 12, 11, 10], 0) ?? 10, bold: true, color: channel.color, margin: 0, valign: "middle" });
+    slide.addText(officeText(channel.name), { x: listX, y, w: 1.65, h: rowH, fontFace: font, fontSize: fitFont([channel.name], 1.65, rowH, [14, 12, 11, 10], 0) ?? 10, color: channel.color, margin: 0, valign: "middle" });
     slide.addText(officeText(channel.shareText), { x: listX + 1.65, y, w: 1.15, h: rowH, fontFace: font, fontSize: rowH >= 0.4 ? 20 : 16, color: channel.color, margin: 0, align: "right", valign: "middle" });
-    slide.addText(`${arrow(channel.direction)}${officeText(channel.growthText)}`, { x: listX + 2.85, y, w: 0.85, h: rowH, fontFace: font, fontSize: 10, bold: true, color: trendColor(channel.direction), margin: 0, align: "right", valign: "middle" });
+    slide.addText(`${arrow(channel.direction)}${officeText(channel.growthText)}`, { x: listX + 2.85, y, w: 0.85, h: rowH, fontFace: font, fontSize: 10, color: trendColor(channel.direction), margin: 0, align: "right", valign: "middle" });
     slide.addShape(pptx.ShapeType.line, { x: listX, y: y + rowH, w: 3.7, h: 0, line: { color: RULE, width: 0.75 } });
   });
 }
@@ -163,9 +178,9 @@ function addTextWithVisual(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: Sli
     const body = bodyBox(block, { ...boxes[index]!, h: maxH }, needsBasisLabel(block));
     const size = fitFont(blockParagraphs(block), body.w, body.h, bodySteps(content.layout), PARA_SPACE);
     if (size === null) return false;
-    heights.push(maxH - body.h + heightFor(blockParagraphs(block), body.w - 0.2, size, PARA_SPACE) + 0.3);
+    heights.push(maxH - body.h + heightFor(blockParagraphs(block), body.w - 0.2, size, PARA_SPACE) + 0.25);
   }
-  const h = Math.min(maxH, Math.max(1.2, ...heights));
+  const h = Math.min(maxH, Math.max(0.8, ...heights));
   const accent = hex(organization.brand.accentColor);
   content.blocks.forEach((block, index) => {
     const box = boxes[index]!;
@@ -204,7 +219,7 @@ function addTextWithVisual(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: Sli
     slide.addText(officeText(dashboard.months[index]!), { x, y: y + 0.2, w: tileW, h: 0.35, fontFace: font, fontSize: 13, color: MUTED, margin: 0, align: "center" });
     slide.addText(value === null ? "n/a" : usd(Math.round(value * 100)), { x, y: y + 0.6, w: tileW, h: h - 0.9, fontFace: font, fontSize: 30, bold: true, color: DARK, margin: 0, align: "center", valign: "middle" });
   });
-  if (aovKpi) slide.addText(`${arrow(aovKpi.direction)}${officeText(aovKpi.change)}`, { x: tileX, y: top + bandH - 0.45, w: tileW * 2 + 0.25, h: 0.35, fontFace: font, fontSize: 13, bold: true, color: trendColor(aovKpi.direction), margin: 0, align: "center" });
+  if (aovKpi) slide.addText(`${arrow(aovKpi.direction)}${officeText(aovKpi.change)}`, { x: tileX, y: top + bandH - 0.45, w: tileW * 2 + 0.25, h: 0.35, fontFace: font, fontSize: 13, color: trendColor(aovKpi.direction), margin: 0, align: "center" });
   return true;
 }
 
@@ -222,8 +237,8 @@ function addCardGrid(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideCont
   const gap = 0.3;
   const cardW = (SLIDE.w - (cols - 1) * gap) / cols;
   const cardH = Math.min(2.4, (BAND_BOTTOM - top - (rows - 1) * gap) / rows);
-  const textW = cardW - 0.5;
-  const textH = cardH - 0.95;
+  const textW = cardW - 0.6;
+  const textH = cardH - 0.75;
   const sizes = block.items.map((item) => fitFont([item], textW, textH, [22, 20, 18, 16], 0));
   if (sizes.some((size) => size === null)) return false;
   const size = Math.min(...(sizes as number[]));
@@ -231,14 +246,14 @@ function addCardGrid(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideCont
     const headingSize = fitFont([block.heading], SLIDE.w, headingH + 0.1, [19, 17, 16], 0) ?? 16;
     slide.addText(officeText(block.heading), { x: SLIDE.x, y: SLIDE.bodyY, w: SLIDE.w, h: headingH, fontFace: font, fontSize: headingSize, bold: true, color: hex(organization.brand.primaryColor), margin: 0, valign: "top" });
   }
-  if (labelled) slide.addText(block.basis === "recommendation" ? "RECOMMENDATION" : "ASSUMPTION", { x: SLIDE.x, y: SLIDE.bodyY + (block.heading ? headingH : 0), w: SLIDE.w, h: labelH - 0.05, fontFace: font, fontSize: 11, bold: true, color: accent, margin: 0, charSpacing: 1 });
+  if (labelled) slide.addText(basisLabel(block), { x: SLIDE.x, y: SLIDE.bodyY + (block.heading ? headingH : 0), w: SLIDE.w, h: labelH - 0.05, fontFace: font, fontSize: 12, color: accent, margin: 0 });
   block.items.forEach((item, index) => {
     const x = SLIDE.x + (index % cols) * (cardW + gap);
     const y = top + Math.floor(index / cols) * (cardH + gap);
     slide.addShape(pptx.ShapeType.roundRect, { x, y, w: cardW, h: cardH, rectRadius: 0.1, fill: { color: "FFFFFF" }, line: { color: CARD_LINE, width: 0.75 } });
-    slide.addShape(pptx.ShapeType.ellipse, { x: x + 0.25, y: y + 0.22, w: 0.5, h: 0.5, fill: { color: accent }, line: { color: accent } });
-    slide.addText(String(index + 1), { x: x + 0.25, y: y + 0.22, w: 0.5, h: 0.5, fontFace: font, fontSize: 16, bold: true, color: "FFFFFF", align: "center", valign: "middle", margin: 0 });
-    slide.addText(officeText(item), { x: x + 0.25, y: y + 0.85, w: textW, h: textH, fontFace: font, fontSize: size, color: BODY, margin: 0, valign: "top" });
+    // Unnumbered: these are separate items, not a sequence. An accent rule marks each card instead.
+    slide.addShape(pptx.ShapeType.rect, { x: x + 0.3, y: y + 0.3, w: 0.6, h: 0.06, fill: { color: accent }, line: { color: accent } });
+    slide.addText(officeText(item), { x: x + 0.3, y: y + 0.55, w: textW, h: textH, fontFace: font, fontSize: size, color: BODY, margin: 0, valign: "top", lineSpacingMultiple: LINE_SPACING });
   });
   return true;
 }
@@ -261,8 +276,8 @@ function addStackedCards(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: Slide
     if (!items.length || items.length > 6) return false;
     const textW = box.w - 0.75;
     let chosen: Plan | null = null;
-    for (const size of [20, 18, 16]) {
-      const heights = items.map((item) => Math.max(0.8, heightFor([item], textW, size, 0) + 0.4));
+    for (const size of [22, 20, 18, 16]) {
+      const heights = items.map((item) => Math.max(0.85, heightFor([item], textW, size, 0) + 0.45));
       const total = heights.reduce((sum, h) => sum + h, 0) + (items.length - 1) * gap;
       if (total <= avail) {
         // Stretch rows to use the slide height, but never into tall empty boxes.
@@ -278,13 +293,20 @@ function addStackedCards(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: Slide
     const plan = plans[index]!;
     const { box } = plan;
     if (block.heading) slide.addText(officeText(block.heading), { x: box.x, y: SLIDE.bodyY, w: box.w, h: headingH, fontFace: font, fontSize: fitFont([block.heading], box.w, headingH + 0.1, [19, 17, 16], 0) ?? 16, bold: true, color: primary, margin: 0, valign: "top" });
-    if (needsBasisLabel(block)) slide.addText(block.basis === "recommendation" ? "RECOMMENDATION" : "ASSUMPTION", { x: box.x, y: SLIDE.bodyY + (block.heading ? headingH : 0), w: box.w, h: labelH - 0.05, fontFace: font, fontSize: 11, bold: true, color: accent, margin: 0, charSpacing: 1 });
+    if (needsBasisLabel(block)) slide.addText(basisLabel(block), { x: box.x, y: SLIDE.bodyY + (block.heading ? headingH : 0), w: box.w, h: labelH - 0.05, fontFace: font, fontSize: 12, color: accent, margin: 0 });
     let y = plan.top;
+    const rowPairs = pairs(block) !== null;
     for (const row of plan.rows) {
       slide.addShape(pptx.ShapeType.roundRect, { x: box.x, y, w: box.w, h: row.h, rectRadius: 0.08, fill: { color: "FFFFFF" }, line: { color: CARD_LINE, width: 0.75 } });
-      if (block.kind === "bullets") slide.addShape(pptx.ShapeType.ellipse, { x: box.x + 0.22, y: y + row.h / 2 - 0.09, w: 0.18, h: 0.18, fill: { color: accent }, line: { color: accent } });
-      else slide.addShape(pptx.ShapeType.rect, { x: box.x, y: y + 0.12, w: 0.07, h: row.h - 0.24, fill: { color: accent }, line: { color: accent } });
-      slide.addText(officeText(row.text), { x: box.x + 0.55, y, w: box.w - 0.75, h: row.h, fontFace: font, fontSize: plan.size, color: BODY, margin: 0, valign: "middle" });
+      const pair = rowPairs ? row.text.match(PAIR) : null;
+      if (pair) {
+        slide.addShape(pptx.ShapeType.rect, { x: box.x, y: y + 0.12, w: 0.07, h: row.h - 0.24, fill: { color: accent }, line: { color: accent } });
+        slide.addText([{ text: `${officeText(pair[1]!)}  `, options: { color: MUTED } }, { text: officeText(pair[2]!), options: { color: BODY } }], { x: box.x + 0.3, y, w: box.w - 0.5, h: row.h, fontFace: font, fontSize: plan.size, margin: 0, valign: "middle", lineSpacingMultiple: LINE_SPACING });
+      } else {
+        if (block.kind === "bullets") slide.addShape(pptx.ShapeType.ellipse, { x: box.x + 0.22, y: y + row.h / 2 - 0.08, w: 0.16, h: 0.16, fill: { color: accent }, line: { color: accent } });
+        else slide.addShape(pptx.ShapeType.rect, { x: box.x, y: y + 0.12, w: 0.07, h: row.h - 0.24, fill: { color: accent }, line: { color: accent } });
+        slide.addText(officeText(row.text), { x: box.x + 0.55, y, w: box.w - 0.75, h: row.h, fontFace: font, fontSize: plan.size, color: BODY, margin: 0, valign: "middle", lineSpacingMultiple: LINE_SPACING });
+      }
       y += row.h + gap;
     }
   });
@@ -306,7 +328,7 @@ export async function renderPptx(product: WorkProduct, organization: Organizatio
     pptx.defineSlideMaster({ title: "AFTERHOURS", background: { color: "F7FAFC" }, objects: [
       { rect: { x: 0, y: 0, w: SLIDE.width, h: 0.13, fill: { color: accent }, line: { color: accent } } },
       { text: { text: officeText(organization.name), options: { x: 0.7, y: 7.1, w: 5, h: 0.25, fontFace: font, fontSize: 10, color: MUTED, margin: 0 } } },
-      { text: { text: "REVIEW DRAFT", options: { x: 9.6, y: 7.1, w: 2.6, h: 0.25, fontFace: font, fontSize: 10, color: MUTED, align: "right", margin: 0 } } },
+      { text: { text: "Review draft", options: { x: 9.6, y: 7.1, w: 2.6, h: 0.25, fontFace: font, fontSize: 10, color: MUTED, align: "right", margin: 0 } } },
     ], slideNumber: { x: 12.4, y: 7.08, w: 0.5, h: 0.28, color: MUTED, fontSize: 10, fontFace: font } });
     product.slides.forEach((content, index) => {
       const slide = pptx.addSlide({ masterName: "AFTERHOURS" });
@@ -319,7 +341,7 @@ export async function renderPptx(product: WorkProduct, organization: Organizatio
       }
       if (content.layout === "title") {
         const block = content.blocks[0];
-        if (block?.heading) slide.addText(officeText(block.heading).toUpperCase(), { x: SLIDE.x, y: 1.9, w: SLIDE.w, h: 0.4, fontFace: font, fontSize: 14, bold: true, color: accent, margin: 0, charSpacing: 2 });
+        if (block?.heading) slide.addText(officeText(block.heading), { x: SLIDE.x, y: 1.9, w: SLIDE.w, h: 0.4, fontFace: font, fontSize: 16, color: accent, margin: 0 });
         const titleSize = fitFont([content.title], SLIDE.w, COVER_TITLE.h, COVER_TITLE.steps, 0) ?? COVER_TITLE.steps.at(-1)!;
         slide.addText(officeText(content.title), { x: SLIDE.x, y: COVER_TITLE.y, w: SLIDE.w, h: COVER_TITLE.h, fontFace: font, fontSize: titleSize, bold: true, color: primary, margin: 0, valign: "top" });
         slide.addShape(pptx.ShapeType.rect, { x: SLIDE.x, y: 4.2, w: 1.4, h: 0.06, fill: { color: accent }, line: { color: accent } });

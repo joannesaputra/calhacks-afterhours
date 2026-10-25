@@ -118,7 +118,7 @@ function dashboardPage(product: WorkProduct, dashboard: Dashboard, organization:
   const rule = { style: BorderStyle.SINGLE, size: 8, color: RULE };
   const headerW = Math.round(CONTENT_WIDTH * 0.68);
   const header = plainTable([headerW, CONTENT_WIDTH - headerW], [new TableRow({ children: [
-    cell(headerW, [line([run("Report Time Frame  |  ", { bold: true, size: 19, color: "FFFFFF" }), run(`${dashboard.timeFrame} `, { bold: true, size: 19, color: "FFFFFF" }), run(`(Comparing to ${dashboard.comparison})`, { italics: true, size: 19, color: "D9D9D9" })])], { fill: DARK }),
+    cell(headerW, [line([run("Report time frame  |  ", { size: 19, color: "FFFFFF" }), run(`${dashboard.timeFrame} `, { bold: true, size: 19, color: "FFFFFF" }), run(`(Comparing to ${dashboard.comparison})`, { italics: true, size: 19, color: "D9D9D9" })])], { fill: DARK }),
     cell(CONTENT_WIDTH - headerW, [line([run("●  ", { size: 26, color: DARK }), run(organization.name.toUpperCase(), { bold: true, size: 20, color: DARK })], 0, AlignmentType.RIGHT)]),
   ] })]);
   const tileW = Math.floor(CONTENT_WIDTH / dashboard.kpis.length);

@@ -3,7 +3,7 @@ import type { ContentBlock, SlideContent, WorkProduct } from "@afterhours/contra
 /**
  * Deterministic slide text budgets. Fonts step down from the layout's base size to a readable
  * floor; content that still does not fit is reported as an issue instead of being shrunk
- * unreadably or silently clipped. Estimates assume ~0.5em average glyph width (Aptos/Calibri)
+ * unreadably or silently clipped. Estimates assume ~0.5em average glyph width (Helvetica Neue/Arial)
  * and 1.2 line height, so they are conservative rather than pixel-exact.
  */
 export const SLIDE = { width: 13.333, height: 7.5, x: 0.7, w: 11.9, titleY: 0.3, titleH: 1.0, bodyY: 1.4, bodyH: 5.3 } as const;
@@ -16,7 +16,8 @@ export const MAX_TABLE_ROWS = 7;
 export const MAX_TABLE_COLUMNS = 5;
 export const MAX_CHART_POINTS = 12;
 const GLYPH_EM = 0.5;
-const LINE = 1.2;
+/** 1.2 em single spacing x the renderer's 1.1 line spacing (LINE_SPACING in render/pptx.ts). */
+const LINE = 1.32;
 
 export function linesFor(text: string, widthIn: number, pt: number): number {
   const perLine = Math.max(1, Math.floor((widthIn * 72) / (pt * GLYPH_EM)));
@@ -47,7 +48,7 @@ export function fitFont(paragraphs: string[], widthIn: number, heightIn: number,
 }
 
 export const bodySteps = (layout: SlideContent["layout"]): number[] => {
-  const base = layout === "title" ? 24 : layout === "two_column" ? 20 : 20;
+  const base = layout === "title" ? 24 : 22;
   const steps: number[] = [];
   for (let pt = base; pt >= MIN_BODY_PT; pt -= 2) steps.push(pt);
   return steps;

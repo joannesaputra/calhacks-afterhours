@@ -6,5 +6,5 @@
   "currency": "USD",
   "backgroundText": "Harbor Creative is a fictional small creative strategy agency. It prepares practical launch strategies, content plans, and measurement frameworks for local consumer brands. No awards, past clients, or performance claims are implied.",
   "policiesText": "The standard four-week launch strategy package costs USD 6,000 and includes discovery, audience and message strategy, a four-week content calendar, and a measurement plan. It excludes ad spend, ongoing campaign management, custom website development, and guaranteed revenue outcomes.",
-  "brand": { "primaryColor": "#102A43", "accentColor": "#14B8A6", "fontFamily": "Aptos" }
+  "brand": { "primaryColor": "#102A43", "accentColor": "#14B8A6", "fontFamily": "Helvetica Neue" }
 }
