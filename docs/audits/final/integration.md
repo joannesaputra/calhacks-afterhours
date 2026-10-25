@@ -121,6 +121,16 @@ Persistence: marked `01b1ae6e` reviewed, stopped the worker, restarted the API: 
 still shown; the task keeps its `live` label while the app shows Fixture mode (snapshot). Afterwards: Automation off,
 `GENERATION_MODE=fixture`, worker stopped (heartbeat stale), Gmail still connected.
 
+## O7 live re-check (2026-10-24, code `1ef0060`)
+
+Checks on `1ef0060`: typecheck, lint, build 0; 361 tests in 32 files; browser 25 passed + 1 explained skip; QA 53/53.
+`GENERATION_MODE=live`, API and web only, Automation on for the window. Joanne sent the same case as before: no subject,
+no text, only `maple-and-moss-brief.md` (task `0bc377e7-8b21-4c32-b7dd-dea7c3e98172`). `gmail:poll-once` → 1 live task;
+`worker:once` → `needs_input` in 5 ms, **0 Claude calls**, question "What would you like prepared…". Answered in the UI
+("proposal and five-slide kickoff deck for Maple & Moss from the attached brief") → revision 2, `worker:once` → `ready`,
+1 call (5,215 / 4,223 tokens), 5 slide parts, USD 6,000 and four weeks quoted from the brief, notification simulated.
+Afterwards Automation off, `GENERATION_MODE=fixture`, no worker, queue empty.
+
 ## Gmail setup for Darren (no secrets here)
 
 1. Google Cloud project → enable **Gmail API**.
