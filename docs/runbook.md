@@ -29,11 +29,13 @@ disagree). Never stop a process you did not start. Reloading a task page always 
 - `GENERATION_MODE=fixture` (default): Person 2's fixture intelligence. Disclose as fixture output.
 - `GENERATION_MODE=live`: requires `MODEL_PROVIDER=anthropic` (Claude is the only live provider), `MODEL_NAME` and
   `ANTHROPIC_API_KEY`. The Claude path is covered by unit tests with a fake
-  `fetch`; it has **not** been run against the real API. Anything missing → `GET /api/integrations` shows
+  `fetch`, and one real demo-intake proposal passed at `9a5684f` (see `docs/batches/batch-7/integration.md`). Later engine
+  changes (see `docs/audits/final/audit.md`) were tested offline only. Anything missing → `GET /api/integrations` shows
   `model.configured=false`, `pnpm check:ready` prints an INFO line, and live tasks fail nonretryably with
   `MODEL_NOT_CONFIGURED` before the engine runs. There is never a fixture fallback.
   Mode and the organization profile are snapshotted per task at ingestion; changing them affects only new tasks.
 - `pnpm worker:once` runs the real worker for at most one job (and one notification), with no polling loop, for deliberate bounded live checks; the normal retry policy is unchanged. It is not a replacement for `pnpm dev`.
+- `pnpm gmail:poll-once` runs exactly one Gmail poll cycle (no engine, no delivery, no job claim): see "Controlled Gmail intake check" below.
 - Demo injection (`ingestionMode=demo`) vs real Gmail (`ingestionMode=gmail`) is stored per task.
 
 ## Gmail (P1) — Google Cloud console steps
@@ -50,6 +52,32 @@ disagree). Never stop a process you did not start. Reloading a task page always 
 5. In the app: Settings → add the test sender to **allowed senders** (exact address) → Connect Gmail.
 6. Send a new email from the allowed sender to the test inbox. The worker polls every
    `GMAIL_POLL_INTERVAL_SECONDS` (15 s). Only messages received after connecting are processed.
+
+### Settings semantics (what each switch really does)
+
+- **Automation off:** Gmail is not called at all. The checkpoint does not move, so approved senders' mail that arrived
+  while it was off is picked up (bounded, oldest first) when it is turned back on.
+- **Prepare work automatically off:** polling still runs, and each approved sender's message is recorded as ignored
+  (`auto_prepare_disabled`) and checkpointed. It is **not** held for later and is not prepared after turning the switch
+  back on. It is not a review queue.
+- Google's `gmail.readonly` permission covers the whole mailbox. AfterHours lists only new inbox mail after connecting,
+  fetches each listed message to check its sender, and creates work only for exact approved senders. Google does not
+  restrict the grant to those senders.
+- Generation mode and organization profile are snapshotted when a task is ingested.
+
+### Controlled Gmail intake check (no model calls)
+
+The normal worker polls Gmail **and** runs generation, so do not start it for an intake-only check.
+
+1. Stop every worker that uses this database (`pnpm check:worker` should say stale). Keep `NOTIFICATION_CHANNEL=outbox`.
+2. Connect Gmail in Settings, add exactly one approved sender, and turn on Automation and Prepare work automatically.
+3. After connecting, send one new synthetic email from that sender to the connected inbox.
+4. Run `pnpm gmail:poll-once`. It runs one `pollGmailOnce` cycle with the stored encrypted connection and prints the
+   status, counts, new task ids with `ingestionMode`/`generationMode`/`receivedAt`, queued-job counts, and a warning if a
+   worker is running. It never imports the engine or the delivery adapter; new tasks stay `queued`.
+5. Run it again: a repeat must report `ingested: 0` and no new task.
+6. Turn Automation off. The queued task runs only when a worker is started, which in live mode is a billed call that
+   needs its own authorization. `pnpm worker:once` takes the oldest due job, not a chosen one: check the queue first.
 
 ### Polling behaviour (Batch 4)
 
@@ -84,6 +112,9 @@ users can connect. A successful test connection is **not** Google production ver
 | `503 GMAIL_REDIRECT_MISMATCH` | Set `GOOGLE_REDIRECT_URI` to `PUBLIC_APP_URL` + `/api/integrations/gmail/callback`, and register that exact URI in Google Cloud. |
 | `reason=scope` | The Gmail read permission was unticked on Google's consent screen. Connect again and allow it. |
 | `reason=expired` | More than 10 minutes passed between Connect and the callback. Start again. |
+| `reason=exchange_failed` | Google refused the code exchange or the profile read. Check the client secret, that the **Gmail API is enabled** in the same project, and the API log (`gmail oauth exchange failed`, error name only). |
+| Status error "The Gmail API is not enabled" | Enable Gmail API in the Google Cloud project that owns the OAuth client; polling resumes by itself. |
+| `redirect_uri_mismatch` on Google's page | The URI registered on the OAuth client differs from `GOOGLE_REDIRECT_URI` (scheme, host, port, path, trailing slash; `localhost` ≠ `127.0.0.1`). |
 | Mail ignored | Sender not in allowed senders (exact match), automation disabled, or message older than the connection. |
 
 ## Using a different API port locally

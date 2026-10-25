@@ -5,12 +5,12 @@ export interface SalesRow { row: number; month: string; channel: string; revenue
 export interface SalesMetrics {
   currency: "USD";
   months: Array<{ month: string; revenueMinor: number; orders: number; averageOrderValueMinor: number | null }>;
-  channels: Array<{ channel: string; values: Record<string, number>; sharePercent: Record<string, number>; growthPercent: number | null }>;
+  channels: Array<{ channel: string; values: Record<string, number>; sharePercent: Record<string, number | null>; growthPercent: number | null }>;
   revenueChangeMinor: number;
   orderChange: number;
   revenueGrowthPercent: number | null;
   orderGrowthPercent: number | null;
-  websiteSharePercent: Record<string, number>;
+  websiteSharePercent: Record<string, number | null>;
   rows: SalesRow[];
 }
 
@@ -57,7 +57,8 @@ export function calculateSales(csv: string): SalesMetrics {
   });
   const pct = (next: number, previous: number) => previous === 0 ? null : Math.round(((next - previous) / previous) * 10_000) / 100;
   const channelKeys = [...new Set(rows.map((row) => row.channel))].sort();
-  const share = (part: number, whole: number) => whole === 0 ? 0 : Math.round((part / whole) * 1000) / 10;
+  // A month with no revenue has no channel shares (0 of 0 is undefined, not 0%).
+  const share = (part: number, whole: number) => whole === 0 ? null : Math.round((part / whole) * 1000) / 10;
   const channels = channelKeys.map((channel) => {
     const values = Object.fromEntries(monthKeys.map((month) => [month, rows.filter((row) => row.month === month && row.channel === channel).reduce((sum, row) => sum + row.revenueMinor, 0)]));
     return { channel, values, sharePercent: Object.fromEntries(monthKeys.map((month, index) => [month, share(values[month]!, months[index]!.revenueMinor)])), growthPercent: pct(values[monthKeys[1]!]!, values[monthKeys[0]!]!) };

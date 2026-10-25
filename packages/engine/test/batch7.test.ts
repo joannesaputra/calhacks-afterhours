@@ -184,7 +184,7 @@ describe("numeric edge cases (reconstruction for unknown numeric checks)", () =>
     const { result } = await run({ ...base, attachments: [{ ...base.attachments[0]!, bytes }] });
     if (result.outcome !== "ready") throw new Error(`expected ready, got ${result.outcome}`);
     const text = JSON.stringify(result.products);
-    expect(text).toContain("not computable (zero starting value)");
-    expect(text).not.toMatch(/Infinity|NaN/);
+    expect(text).toContain("revenue rose from zero, so no percent change is defined");
+    expect(text).not.toMatch(/Infinity|NaN|increased not computable/);
   }, 20_000);
 });

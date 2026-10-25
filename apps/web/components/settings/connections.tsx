@@ -31,7 +31,7 @@ export function GmailSection({ status, timeZone }: { status: IntegrationStatus["
             <dt>Last checked</dt><dd>{formatDateTime(status.lastPollAt, timeZone, true)}</dd>
           </dl>
           {status.lastError && <p className="callout callout-warn" role="note"><AlertTriangle size={16} aria-hidden /> {status.lastError}</p>}
-          <p className="muted small">Read-only access. Only messages that arrive after connecting, from approved senders, are processed. Your existing inbox is not scanned.</p>
+          <p className="muted small">Google’s read-only permission covers the whole mailbox; it cannot send, change or delete mail. AfterHours reads only new inbox messages that arrive after connecting, checks each sender, and prepares work only for approved senders. Older mail is not imported.</p>
           <div className="actions">
             <a className="btn btn-secondary" href="/api/integrations/gmail/start">{state === "connected" ? "Reconnect Gmail" : "Connect Gmail"}</a>
             {state !== "disconnected" && !confirming && <button type="button" className="btn btn-ghost" onClick={() => setConfirming(true)}>Disconnect</button>}

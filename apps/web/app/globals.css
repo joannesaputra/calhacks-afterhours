@@ -67,6 +67,8 @@ ul.plain, ol.plain { list-style: none; padding: 0; }
 ul, ol { padding-left: 1.25rem; }
 
 :focus-visible { outline: 3px solid #fff; outline-offset: 2px; border-radius: 4px; }
+/* The white focus ring is invisible on the light paper previews; use the paper's ink there. */
+.doc-page :focus-visible, .slide :focus-visible { outline-color: var(--ink); }
 .skip-link { position: absolute; left: -999px; top: 8px; background: var(--ink); color: #000; padding: 8px 16px; border-radius: 8px; z-index: 100; }
 .skip-link:focus { left: 8px; }
 

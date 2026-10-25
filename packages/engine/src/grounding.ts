@@ -54,7 +54,7 @@ export function metricNumbers(metrics: SalesMetrics): number[] {
     if (month.averageOrderValueMinor !== null) values.push(month.averageOrderValueMinor / 100);
   }
   for (const channel of metrics.channels) {
-    values.push(...Object.values(channel.values).map((value) => value / 100), ...Object.values(channel.sharePercent));
+    values.push(...Object.values(channel.values).map((value) => value / 100), ...Object.values(channel.sharePercent).filter((value): value is number => value !== null));
     if (channel.growthPercent !== null) values.push(...pctForms(channel.growthPercent));
   }
   return values;

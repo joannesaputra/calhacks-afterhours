@@ -43,7 +43,17 @@ export interface PollResult {
 
 const AUTH_RE = /invalid_grant|invalid_client|unauthorized|\b401\b|\b403\b|insufficient|token has been (expired|revoked)/i;
 
+/** HTTP status of a Google client error (gaxios sets `status`; older shapes only `response.status`). */
+function httpStatus(e: unknown): number | null {
+  const err = e as { status?: unknown; response?: { status?: unknown } } | null;
+  const status = Number(err?.status ?? err?.response?.status);
+  return Number.isInteger(status) ? status : null;
+}
+
 export function isGmailAuthError(e: unknown): boolean {
+  // Google's 401 text ("Invalid Credentials", "invalid authentication credentials") matches none of the words
+  // below, so the status decides. A 403 stays text-based: rate limits and a disabled API also return 403.
+  if (httpStatus(e) === 401) return true;
   return AUTH_RE.test(e instanceof Error ? e.message : String(e));
 }
 
@@ -52,6 +62,9 @@ export function describeGmailError(e: unknown): string {
     return "Gmail rejected the saved credentials (revoked, expired test token, or missing consent). Reconnect Gmail in Settings.";
   }
   const msg = e instanceof Error ? e.message : String(e);
+  if (/has not been used in project|accessNotConfigured/i.test(msg)) {
+    return "The Gmail API is not enabled in the Google Cloud project. The operator must enable it; polling will retry.";
+  }
   if (/429|quota|rate/i.test(msg)) return "Gmail quota or rate limit reached. Polling will retry automatically.";
   return "Gmail polling failed. It will retry automatically.";
 }

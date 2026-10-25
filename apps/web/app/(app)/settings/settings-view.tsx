@@ -14,7 +14,7 @@ const GMAIL_REASONS: Record<string, string> = {
   session: "Your session changed while connecting. Sign in again, then retry.",
   denied: "Google access was declined, so Gmail was not connected.",
   no_refresh_token: "Google did not return a long-lived token. Remove AfterHours at myaccount.google.com/permissions, then connect again.",
-  exchange_failed: "Google could not complete the connection. Try again.",
+  exchange_failed: "Google could not complete the connection. Try again; if it keeps failing, the operator should check that the Gmail API is enabled in the Google Cloud project and that the client ID and secret are correct.",
   not_configured: "Gmail is not set up on the server (Google client credentials are missing). The operator must add them.",
   redirect_mismatch: "The server's Google redirect address does not match this app's address, so the connection was refused. The operator must fix GOOGLE_REDIRECT_URI.",
   scope: "Google did not grant read access to the mailbox, so nothing was connected. Try again and accept the read-only permission.",

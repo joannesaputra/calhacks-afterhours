@@ -25,7 +25,8 @@
     "test:e2e": "node scripts/e2e.mjs",
     "backup": "tsx scripts/backup.ts",
     "check:worker": "tsx scripts/worker-health.ts",
-    "worker:once": "tsx apps/worker/src/once-main.ts"
+    "worker:once": "tsx apps/worker/src/once-main.ts",
+    "gmail:poll-once": "tsx apps/worker/src/poll-once-main.ts"
   },
   "devDependencies": {
     "@afterhours/contracts": "workspace:*",

@@ -197,9 +197,10 @@ export function isStale(err: unknown): boolean {
 }
 
 /** Same-origin relative path only: blocks absolute URLs, protocol-relative URLs, and backslash tricks. */
-export function safeReturnTo(value: string | null | undefined): string {
+export function safeReturnTo(value: unknown): string {
+  if (typeof value !== "string") return "/";
   // eslint-disable-next-line no-control-regex
-  const hasControl = value ? /[\x00-\x1f]/.test(value) : false;
+  const hasControl = /[\x00-\x1f]/.test(value);
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\") || hasControl) return "/";
   if (value.startsWith("/login")) return "/";
   return value;
