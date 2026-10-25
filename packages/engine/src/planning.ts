@@ -10,11 +10,39 @@ const AMBIGUOUS_QUESTIONS: WorkQuestion[] = [
 
 export type Classification = "proposal" | "report" | "ambiguous" | "no_action" | "unsupported";
 
+/** Asked when the email itself requests nothing: attached files are material to work from, never instructions. */
+export const REQUESTED_WORK_QUESTION: WorkQuestion = {
+  id: "requested_work",
+  question: "What would you like prepared from this email and its attachments (for example a proposal, a report or a presentation), and for whom?",
+  reason: "The email has no subject or message text, so nothing was requested. Attachments alone are treated as material, not as a request.",
+  required: true,
+};
+
+/** True when the subject or body carries text a person wrote; Gmail's "(no subject)" placeholder does not count. */
+export function hasRequestText(input: EngineInput): boolean {
+  const subject = input.email.subject.trim();
+  return input.email.bodyText.trim().length > 0 || (subject.length > 0 && subject.toLowerCase() !== "(no subject)");
+}
+
+/** Plan for an email without request text and without answers: nothing is prepared until someone says what is wanted. */
+export function noRequestPlan(sources: SourceDocument[]): WorkPlan {
+  return {
+    title: "Request needed: email has no message",
+    requestSummary: "The email contains no subject or message text, only attachments. Nothing is prepared until the requested work is stated.",
+    requestedOutputs: [], dueAt: null, dueAtExplanation: null,
+    steps: ["Read the message", "Ask what work is requested"],
+    assumptions: [],
+    questions: [REQUESTED_WORK_QUESTION],
+    sourcesUsed: sources.filter((source) => source.extractionStatus === "complete").map((source) => source.id),
+  };
+}
+
 export function classify(input: EngineInput): Classification {
   // Revision scenarios are resolved before the engine runs (input.context). Reaching here without a context means the
   // request could not be treated as a revision, which this classifier does not handle.
   if (input.fixtureScenario) return input.fixtureScenario === "revision" || input.fixtureScenario === "revision_choice" ? "unsupported" : input.fixtureScenario;
-  const text = `${input.email.subject}\n${input.email.bodyText}`.toLowerCase();
+  // Answers are part of the request: an email without text becomes actionable once someone states the work.
+  const text = `${input.email.subject}\n${input.email.bodyText}\n${input.answers.map((answer) => answer.answer).join("\n")}`.toLowerCase();
   if (/\b(no action|fyi only|newsletter)\b/.test(text)) return "no_action";
   const imperative = /\b(please|prepare|create|draft|make|need|request)\b/.test(text);
   if (!imperative) return "no_action";

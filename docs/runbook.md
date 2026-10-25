@@ -281,5 +281,7 @@ is also safe, but `pnpm backup` is the tested path. Never restore over the live 
 
 - No real all-night run was observed; scheduling is covered by pure-function tests, a controlled-clock worker test and one
   real ~4-minute elapsed-time run. Host sleep, remote deployment and Docker are not verified.
-- Live Gmail, live model and live WhatsApp are BLOCKED on credentials and eligibility (never exercised by tests).
+- Live Gmail and live Claude were verified on one machine with a Testing-mode Google client and real self-sent emails
+  (OAuth connect, intake, proposal, report, clarification, skip, review persistence): see `docs/audits/final/integration.md`.
+  Not verified: other machines, token refresh after the 7-day Testing expiry, and live WhatsApp (no Twilio account).
 - No destructive public reset route exists. `pnpm db:reset -- --demo-only` is a local CLI that refuses real data.
