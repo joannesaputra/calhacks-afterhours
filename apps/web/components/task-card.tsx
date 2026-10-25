@@ -6,7 +6,7 @@ import { describeError } from "@/lib/api";
 import { formatElapsed, formatRelative } from "@/lib/format";
 import { OUTPUT_LABEL, STAGE_LABEL, isActive, isConfigError } from "@/lib/labels";
 import { useNow, useRetry, useTask } from "@/lib/hooks";
-import { StatusBadge } from "./badges";
+import { IngestionBadge, StatusBadge } from "./badges";
 import { useShell } from "./shell";
 import { useToast } from "./providers";
 
@@ -64,7 +64,10 @@ export function TaskCard({ task, nowMs }: { task: TaskSummary; nowMs: number }) 
     <article className={`card task-card status-${task.status}`} aria-label={task.title}>
       <div className="card-head">
         <h2 className="card-title"><Link href={href}>{task.title}</Link></h2>
-        <StatusBadge status={task.status} workerHealthy={workerHealthy} />
+        <div className="card-badges">
+          <StatusBadge status={task.status} workerHealthy={workerHealthy} />
+          <IngestionBadge mode={task.ingestionMode} />
+        </div>
       </div>
       <p className="card-meta">
         <span className="muted" title="When the original email was sent (taken from the email itself)">Email sent {formatRelative(task.receivedAt, nowMs)}</span>
