@@ -420,3 +420,7 @@ input,select,textarea{background:#fff;border-radius:12px}
 .nav-count{font-size:12px;font-variant-numeric:tabular-nums;color:#6B6B6B}
 .nav-count-bad{background:var(--bad-bg);color:var(--bad-ink);border:1px solid var(--bad-border);border-radius:9999px;padding:0 7px;font-weight:600}
 @media (min-width:821px){.rail nav .subnav{display:flex}.filters{display:none}.nav-link[data-group-active]:not([aria-current="page"]){color:#111}}
+
+.sender-group{margin-top:28px}
+.sender-head{display:flex;align-items:baseline;gap:10px;margin:0 0 12px;font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.sender-head .count{margin-left:0;font-family:inherit;color:var(--ink-2)}

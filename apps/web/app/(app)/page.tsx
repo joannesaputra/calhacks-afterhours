@@ -25,6 +25,17 @@ function Queue() {
   const active = FILTERS.find((f) => f.id === filter)!;
   const shown = active.statuses ? items.filter((t) => active.statuses!.includes(t.status)) : items;
   const readyCount = counts.ready;
+  // Group by sender address. Groups keep the queue's own order (first task decides the group's position).
+  const groups = useMemo(() => {
+    const byEmail = new Map<string, { email: string; label: string; tasks: typeof shown }>();
+    for (const t of shown) {
+      const key = t.senderEmail.toLowerCase();
+      const g = byEmail.get(key) ?? { email: key, label: t.senderName ? `${t.senderName} <${t.senderEmail}>` : t.senderEmail, tasks: [] };
+      g.tasks.push(t);
+      byEmail.set(key, g);
+    }
+    return [...byEmail.values()];
+  }, [shown]);
 
   return (
     <>
@@ -72,9 +83,17 @@ function Queue() {
         )
       )}
 
-      <div className="stack">
-        {shown.map((t) => <TaskCard key={t.id} task={t} nowMs={now} />)}
-      </div>
+      {groups.map((g) => (
+        <section key={g.email} className="sender-group" aria-label={`From ${g.label}`}>
+          <h2 className="sender-head wrap-anywhere">
+            <span>From {g.label}</span>
+            <span className="count">{g.tasks.length}</span>
+          </h2>
+          <div className="stack">
+            {g.tasks.map((t) => <TaskCard key={t.id} task={t} nowMs={now} />)}
+          </div>
+        </section>
+      ))}
     </>
   );
 }

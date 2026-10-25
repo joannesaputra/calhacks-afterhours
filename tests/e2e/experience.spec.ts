@@ -291,9 +291,10 @@ test("11. ingestion time and original email time are labeled separately and are 
   await expect(page.locator(".details-tabs").getByRole("tabpanel").getByText("Email sent", { exact: true })).toBeVisible();
   await expect(page.locator(".details-tabs").getByRole("tabpanel").getByText("Entered the system", { exact: true })).toBeVisible();
 
-  // Queue cards show the sender and when the email was sent.
+  // The queue groups cards under a "From <sender>" heading; each card says when the email was sent.
   await page.goto("/");
-  await expect(page.getByRole("article").first()).toContainText(/From .+ · sent /);
+  await expect(page.locator(".sender-head").first()).toContainText(/^From .+<.+@.+>/);
+  await expect(page.getByRole("article").first()).toContainText(/Email sent /);
 });
 
 test("12. keyboard: source dialog opens and closes with focus restored, and review works without a mouse", async ({ page }) => {

@@ -67,8 +67,7 @@ export function TaskCard({ task, nowMs }: { task: TaskSummary; nowMs: number }) 
         <StatusBadge status={task.status} workerHealthy={workerHealthy} />
       </div>
       <p className="card-meta">
-        <span className="wrap-anywhere">From {task.senderName ? `${task.senderName} <${task.senderEmail}>` : task.senderEmail}</span>
-        <span className="muted" title="When the original email was sent (taken from the email itself)"> · sent {formatRelative(task.receivedAt, nowMs)}</span>
+        <span className="muted" title="When the original email was sent (taken from the email itself)">Email sent {formatRelative(task.receivedAt, nowMs)}</span>
       </p>
       <div className="chips">
         <IngestionBadge mode={task.ingestionMode} />
