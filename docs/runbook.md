@@ -33,6 +33,7 @@ disagree). Never stop a process you did not start. Reloading a task page always 
   `model.configured=false`, `pnpm check:ready` prints an INFO line, and live tasks fail nonretryably with
   `MODEL_NOT_CONFIGURED` before the engine runs. There is never a fixture fallback.
   Mode and the organization profile are snapshotted per task at ingestion; changing them affects only new tasks.
+- `pnpm worker:once` runs the real worker for at most one job (and one notification), with no polling loop, for deliberate bounded live checks; the normal retry policy is unchanged. It is not a replacement for `pnpm dev`.
 - Demo injection (`ingestionMode=demo`) vs real Gmail (`ingestionMode=gmail`) is stored per task.
 
 ## Gmail (P1) — Google Cloud console steps
