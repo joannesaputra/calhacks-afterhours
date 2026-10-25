@@ -1,6 +1,7 @@
-import { AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, Packer, PageNumber, Paragraph, Table, TableCell, TableLayoutType, TableRow, TextRun, WidthType } from "docx";
+import { AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, Packer, PageBreak, PageNumber, Paragraph, ShadingType, Table, TableCell, TableLayoutType, TableRow, TextRun, VerticalAlignTable, WidthType, type TableVerticalAlign } from "docx";
 import type { ContentBlock, OrganizationProfile, SourceDocument, WorkProduct } from "@afterhours/contracts";
 import { usd } from "../calculations";
+import type { Dashboard, Direction } from "../dashboard";
 import { EngineError } from "../errors";
 import { officeText, shorten } from "../text";
 
@@ -8,6 +9,7 @@ import { officeText, shorten } from "../text";
 const MARGIN = 1080;
 const CONTENT_WIDTH = 11906 - 2 * MARGIN;
 const MUTED = "627D98";
+const BODY_INK = "334E68";
 const hex = (value: string) => value.replace(/^#/, "").toUpperCase();
 
 interface RunOptions { bold?: boolean; italics?: boolean; size?: number; color?: string }
@@ -93,15 +95,84 @@ function sourceNotes(product: WorkProduct, sources: SourceDocument[]): Paragraph
   ]);
 }
 
-export async function renderDocx(product: WorkProduct, sources: SourceDocument[], organization: OrganizationProfile): Promise<Uint8Array> {
+const DARK = "3A3A3A";
+const RULE = "C9D2DC";
+const NONE = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+const NO_BORDERS = { top: NONE, bottom: NONE, left: NONE, right: NONE };
+const arrow = (direction: Direction) => (direction === "up" ? "▲ " : direction === "down" ? "▼ " : "");
+const trendColor = (direction: Direction) => (direction === "up" ? "129C86" : direction === "down" ? "D64545" : MUTED);
+const BAR_UNITS = 32;
+
+function plainTable(widths: number[], rows: TableRow[], borders: Record<string, unknown> = {}): Table {
+  return new Table({ layout: TableLayoutType.FIXED, columnWidths: widths, width: { size: CONTENT_WIDTH, type: WidthType.DXA }, borders: { top: NONE, bottom: NONE, left: NONE, right: NONE, insideHorizontal: NONE, insideVertical: NONE, ...borders }, rows });
+}
+const cell = (width: number, children: Paragraph[], options: { fill?: string; borders?: Record<string, unknown>; align?: TableVerticalAlign } = {}) => new TableCell({
+  width: { size: width, type: WidthType.DXA }, margins: { top: 60, bottom: 60, left: 80, right: 80 }, verticalAlign: options.align ?? VerticalAlignTable.CENTER,
+  shading: options.fill ? { type: ShadingType.CLEAR, fill: options.fill, color: "auto" } : undefined, borders: { ...NO_BORDERS, ...(options.borders ?? {}) }, children,
+});
+const line = (runs: TextRun[], after = 0, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType]) => new Paragraph({ spacing: { after, line: 240 }, alignment, children: runs });
+
+/** Template-style first page for sales reports: every value comes from the code-built dashboard. */
+function dashboardPage(product: WorkProduct, dashboard: Dashboard, organization: OrganizationProfile): Array<Paragraph | Table> {
+  const primary = hex(organization.brand.primaryColor);
+  const rule = { style: BorderStyle.SINGLE, size: 8, color: RULE };
+  const headerW = Math.round(CONTENT_WIDTH * 0.68);
+  const header = plainTable([headerW, CONTENT_WIDTH - headerW], [new TableRow({ children: [
+    cell(headerW, [line([run("Report Time Frame  |  ", { bold: true, size: 19, color: "FFFFFF" }), run(`${dashboard.timeFrame} `, { bold: true, size: 19, color: "FFFFFF" }), run(`(Comparing to ${dashboard.comparison})`, { italics: true, size: 19, color: "D9D9D9" })])], { fill: DARK }),
+    cell(CONTENT_WIDTH - headerW, [line([run("●  ", { size: 26, color: DARK }), run(organization.name.toUpperCase(), { bold: true, size: 20, color: DARK })], 0, AlignmentType.RIGHT)]),
+  ] })]);
+  const tileW = Math.floor(CONTENT_WIDTH / dashboard.kpis.length);
+  const kpis = plainTable(dashboard.kpis.map(() => tileW), [new TableRow({ children: dashboard.kpis.map((kpi) => cell(tileW, [
+    line([run(kpi.label, { size: 17, color: MUTED })], 40),
+    line([run(kpi.value, { bold: true, size: 36, color: DARK })], 20),
+    line([run(`${arrow(kpi.direction)}${kpi.change}`, { bold: true, size: 18, color: trendColor(kpi.direction) })]),
+  ], { borders: { top: rule, bottom: rule }, align: VerticalAlignTable.TOP })) })]);
+  const shareW = [Math.round(CONTENT_WIDTH * 0.46), Math.round(CONTENT_WIDTH * 0.27)];
+  shareW.push(CONTENT_WIDTH - shareW[0]! - shareW[1]!);
+  const shares = plainTable(shareW, [
+    new TableRow({ children: [cell(shareW[0]!, [line([run("Channel", { size: 16, color: MUTED })])]), cell(shareW[1]!, [line([run(`Share of revenue, ${dashboard.months[1]}`, { size: 16, color: MUTED })], 0, AlignmentType.RIGHT)]), cell(shareW[2]!, [line([run(`Change vs ${dashboard.months[0]}`, { size: 16, color: MUTED })], 0, AlignmentType.RIGHT)])] }),
+    ...dashboard.channels.map((channel) => new TableRow({ cantSplit: true, children: [
+      cell(shareW[0]!, [line([run("●  ", { color: channel.color, size: 22 }), run(channel.name, { bold: true, size: 22, color: channel.color })])], { borders: { bottom: rule } }),
+      cell(shareW[1]!, [line([run(channel.shareText, { size: 32, color: channel.color })], 0, AlignmentType.RIGHT)], { borders: { bottom: rule } }),
+      cell(shareW[2]!, [line([run(`${arrow(channel.direction)}${channel.growthText}`, { bold: true, size: 18, color: trendColor(channel.direction) })], 0, AlignmentType.RIGHT)], { borders: { bottom: rule } }),
+    ] })),
+  ]);
+  const max = Math.max(...dashboard.channels.flatMap((channel) => channel.revenue), 0);
+  const barW = [Math.round(CONTENT_WIDTH * 0.26), Math.round(CONTENT_WIDTH * 0.56)];
+  barW.push(CONTENT_WIDTH - barW[0]! - barW[1]!);
+  const bars = plainTable(barW, dashboard.channels.flatMap((channel) => channel.revenue.map((value, month) => new TableRow({ cantSplit: true, children: [
+    cell(barW[0]!, [line([run(month === 0 ? channel.name : "", { bold: true, size: 18, color: channel.color }), run(`  ${dashboard.months[month]}`, { size: 16, color: MUTED })])]),
+    cell(barW[1]!, [line([run("█".repeat(max > 0 ? Math.max(value > 0 ? 1 : 0, Math.round((value / max) * BAR_UNITS)) : 0), { size: 16, color: month === 0 ? "BCCCDC" : channel.color })])]),
+    cell(barW[2]!, [line([run(usd(Math.round(value * 100)), { size: 18, color: DARK })], 0, AlignmentType.RIGHT)]),
+  ] }))));
+  return [
+    header,
+    new Paragraph({ spacing: { before: 240, after: 60 }, children: [run(product.title, { bold: true, size: 40, color: primary })] }),
+    ...(product.subtitle ? [new Paragraph({ spacing: { after: 60 }, children: [run(product.subtitle, { italics: true, size: 22, color: MUTED })] })] : []),
+    new Paragraph({ spacing: { after: 200 }, children: [run(`Prepared by ${organization.name} for internal review. Not sent to or accepted by any client.`, { size: 18, color: MUTED })] }),
+    kpis,
+    new Paragraph({ spacing: { before: 280, after: 120 }, keepNext: true, children: [run(dashboard.question, { bold: true, size: 26, color: DARK })] }),
+    para("Revenue share per channel", { size: 20, color: BODY_INK, keepNext: true, after: 60 }),
+    shares,
+    para(`Revenue per channel, ${dashboard.months[0]} (grey) and ${dashboard.months[1]} (color)`, { size: 20, color: BODY_INK, keepNext: true, after: 60 }),
+    bars,
+    para(dashboard.note, { italics: true, size: 16, color: MUTED, after: 0 }),
+    new Paragraph({ children: [new PageBreak()] }),
+  ];
+}
+
+export async function renderDocx(product: WorkProduct, sources: SourceDocument[], organization: OrganizationProfile, dashboard: Dashboard | null = null): Promise<Uint8Array> {
   try {
     const font = organization.brand.fontFamily;
     const primary = hex(organization.brand.primaryColor);
     const sourceTitles = new Map(sources.map((source) => [source.id, source.filename ?? source.title]));
-    const content: Array<Paragraph | Table> = [
+    const opening: Array<Paragraph | Table> = dashboard && product.kind === "report" ? dashboardPage(product, dashboard, organization) : [
       new Paragraph({ spacing: { before: 600, after: 160 }, children: [run(product.title, { bold: true, size: 44, color: primary })] }),
       ...(product.subtitle ? [new Paragraph({ spacing: { after: 120 }, children: [run(product.subtitle, { italics: true, size: 26, color: MUTED })] })] : []),
       new Paragraph({ spacing: { after: 480 }, border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: hex(organization.brand.accentColor), space: 8 } }, children: [run(`Prepared by ${organization.name} for internal review. Not sent to or accepted by any client.`, { size: 20, color: MUTED })] }),
+    ];
+    const content: Array<Paragraph | Table> = [
+      ...opening,
       ...product.blocks.flatMap((block) => blockNodes(block, organization, sourceTitles)),
       para("Working assumptions", { heading: HeadingLevel.HEADING_1, color: primary, bold: true, size: 28 }),
       ...product.assumptions.map((item) => para(item, { bullet: true, after: 80 })),

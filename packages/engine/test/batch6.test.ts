@@ -25,7 +25,8 @@ describe("Batch 6 report variation", () => {
     const chart = result.products.find((product) => product.kind === "report")!.blocks.find((block) => block.kind === "chart")!.chart!;
     expect(chart.series[0]!.values).toEqual([12_000, 16_000]);
     const deck = unzip(result.files.find((file) => file.format === "pptx")!.bytes);
-    expect(new TextDecoder().decode(deck.get("ppt/charts/chart1.xml")!)).toContain("<c:v>16000</c:v>");
+    // The cover dashboard adds charts before the revenue-by-month chart, so look across every chart part.
+    expect([...deck].filter(([name]) => /^ppt\/charts\/chart\d+\.xml$/.test(name)).map(([, bytes]) => new TextDecoder().decode(bytes)).join("")).toContain("<c:v>16000</c:v>");
     expect(new TextDecoder().decode(deck.get("ppt/slides/slide2.xml")!)).toContain("Revenue increased 33.3%");
   }, 20_000);
 

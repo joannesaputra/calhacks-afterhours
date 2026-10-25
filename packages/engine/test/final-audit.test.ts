@@ -2,10 +2,13 @@
  * Final audit regressions (docs/audits/final/audit.md). Each test reproduces a defect or checks a
  * required behavior through the real pipeline with fixture inputs; no model is called.
  */
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { EngineInput } from "@afterhours/contracts";
 import { calculateSales, createEngine, runWork, type ModelClient } from "../src/index";
-import { inputFor, text, withAttachmentText } from "./fixtures";
+import { buildDashboard } from "../src/dashboard";
+import { inputFor, root, text, withAttachmentText } from "./fixtures";
 import { unzip } from "./zip";
 
 const deps = () => ({ signal: new AbortController().signal, onProgress: async () => undefined });
@@ -109,5 +112,54 @@ describe("O7: an email with no subject or text asks what is wanted before anythi
     const result = await ready(input);
     expect(result.products.map((product) => product.kind)).toEqual(["report", "presentation"]);
     expect(allText(result)).toContain("Revenue moved from $12,000 in January 2026 to $15,000 in February 2026");
+  });
+});
+
+describe("sales dashboard (template layout): report page 1 and the deck cover, built in code from metrics", () => {
+  const part = (bytes: Uint8Array, name: string) => text(unzip(bytes).get(name) ?? new Uint8Array()).replace(/<[^>]+>/g, " ");
+
+  it("KPIs, changes and channel rows equal the calculated metrics; more than six channels fold into Others", async () => {
+    const dashboard = buildDashboard(calculateSales(csvOf(await inputFor("report"))));
+    expect([dashboard.timeFrame, dashboard.comparison]).toEqual(["February 2026", "January 2026"]);
+    expect(dashboard.kpis.map((kpi) => [kpi.label, kpi.value, kpi.change])).toEqual([
+      ["Total revenue", "$15,000", "+25%"], ["Orders", "150", "+25%"], ["Average order value", "$100", "No change"], ["Website share of revenue", "66.7%", "No change"],
+    ]);
+    expect(dashboard.channels.map((channel) => [channel.name, channel.revenue, channel.shareText, channel.growthText, channel.direction])).toEqual([
+      ["Website", [8000, 10000], "66.7%", "25%", "up"], ["Partnerships", [4000, 5000], "33.3%", "25%", "up"],
+    ]);
+    const many = buildDashboard(calculateSales(await readFile(resolve(root, "fixtures/synthetic/sales-many-channels.csv"), "utf8")));
+    expect(many.channels).toHaveLength(6);
+    expect(many.channels.at(-1)!.name).toMatch(/^Others \(\d+\)$/);
+    expect(many.channels.reduce((sum, channel) => sum + channel.revenue[1], 0)).toBe(9600);
+  });
+
+  it("a month without revenue shows n/a and 'New (from zero)', never a computed 0% share", async () => {
+    const zero = withAttachmentText(await inputFor("report"), (csv) => csv.replace("2026-01,Website,8000,80", "2026-01,Website,0,0").replace("2026-01,Partnerships,4000,40", "2026-01,Partnerships,0,0"));
+    const dashboard = buildDashboard(calculateSales(csvOf(zero)));
+    expect(dashboard.kpis.map((kpi) => kpi.change)).toEqual(["New (from zero)", "New (from zero)", "n/a", "n/a"]);
+  });
+
+  it("the report's first page and the deck cover carry the dashboard; the deck keeps exactly five slides", async () => {
+    const result = await ready(await inputFor("report"));
+    const docx = result.files.find((file) => file.format === "docx")!.bytes;
+    const pptx = result.files.find((file) => file.format === "pptx")!.bytes;
+    const doc = part(docx, "word/document.xml");
+    expect(doc).toContain("Report Time Frame");
+    expect(doc.indexOf("Report Time Frame")).toBeLessThan(doc.indexOf("Executive summary"));
+    expect(doc).toMatch(/\$15,000[\s\S]*▲ \+25%/);
+    expect(text(unzip(docx).get("word/document.xml")!)).toContain('w:type="page"');
+    const slides = [...unzip(pptx).keys()].filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+    expect(slides).toHaveLength(5);
+    const cover = part(pptx, "ppt/slides/slide1.xml");
+    for (const expected of ["Report Time Frame", "February 2026", "$15,000", "▲ +25%", "Website", "66.7%"]) expect(cover).toContain(expected);
+    expect([...unzip(pptx).keys()].filter((name) => /^ppt\/charts\/chart\d+\.xml$/.test(name))).toHaveLength(3);
+  });
+
+  it("proposals never get the sales dashboard", async () => {
+    const result = await ready(await inputFor("proposal"));
+    for (const file of result.files) {
+      const parts = [...unzip(file.bytes)].filter(([name]) => /^(word\/document|ppt\/slides\/slide\d+)\.xml$/.test(name));
+      expect(parts.map(([, bytes]) => text(bytes)).join(" ")).not.toContain("Report Time Frame");
+    }
   });
 });

@@ -1,5 +1,6 @@
 import { EngineInputSchema, EngineResultSchema, type EngineDependencies, type EngineInput, type EngineProgress, type EngineResult, type GeneratedFile, type SourceDocument, type WorkPlan, type WorkProduct, type WorkQuestion } from "@afterhours/contracts";
 import { calculateSales, type SalesMetrics } from "./calculations";
+import { buildDashboard, type Dashboard } from "./dashboard";
 import { proposalProducts, reportProducts, reportTitle } from "./content";
 import { localDateKey, resolveDeadlines } from "./dates";
 import { abortIfNeeded, EngineError } from "./errors";
@@ -25,13 +26,13 @@ const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingm
 const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const missingQuestion = (id: string, question: string, reason: string): WorkQuestion => ({ id, question, reason, required: true });
 
-async function exportProducts(input: EngineInput, products: WorkProduct[], sources: SourceDocument[], signal: AbortSignal): Promise<GeneratedFile[]> {
+async function exportProducts(input: EngineInput, products: WorkProduct[], sources: SourceDocument[], signal: AbortSignal, dashboard: Dashboard | null): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [];
   for (const product of products) {
     abortIfNeeded(signal);
     const title = safeFilename(product.title);
     const format = product.kind === "presentation" ? "pptx" : "docx";
-    const bytes = format === "pptx" ? await renderPptx(product, input.organization) : await renderDocx(product, sources, input.organization);
+    const bytes = format === "pptx" ? await renderPptx(product, input.organization, dashboard) : await renderDocx(product, sources, input.organization, dashboard);
     files.push({ id: stableId(input.taskId, input.revision, product.id, format), productId: product.id, format, filename: `${title}-r${input.revision}.${format}`, mimeType: format === "pptx" ? PPTX_MIME : DOCX_MIME, bytes });
   }
   abortIfNeeded(signal);
@@ -134,7 +135,9 @@ export async function execute(inputValue: EngineInput, deps: EngineDependencies,
   await emit({ stage: "generate", message: "Generated structured content used by both previews and files." });
   verifyProducts(plan, sources, products, verifyContext);
   await emit({ stage: "verify", message: "Verified requested outputs, evidence, quotes, amounts, dates, calculated numbers, and slide layout budgets." });
-  const files = await exportProducts(input, products, sources, signal);
+  // Sales work gets the template dashboard (report page 1, deck cover), built in code from the calculated metrics only.
+  const dashboard = metrics && !products.some((product) => product.kind === "proposal") ? buildDashboard(metrics) : null;
+  const files = await exportProducts(input, products, sources, signal, dashboard);
   await emit({ stage: "export", message: `Exported ${files.length} Office files in memory.` });
   const result = { outcome: "ready" as const, plan, sources, products, files, warnings };
   if (!EngineResultSchema.safeParse(result).success) throw new EngineError("INVALID_OUTPUT", "Final engine result failed runtime validation.", false);
