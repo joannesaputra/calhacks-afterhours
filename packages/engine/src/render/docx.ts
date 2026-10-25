@@ -4,6 +4,7 @@ import { usd } from "../calculations";
 import type { Dashboard, Direction } from "../dashboard";
 import { EngineError } from "../errors";
 import { officeText, shorten } from "../text";
+import { embedCharts, WordChartSlots, type WordChart } from "./wordCharts";
 
 /** A4 with 0.75" margins: 11906 - 2 * 1080 twips of usable width. */
 const MARGIN = 1080;
@@ -64,7 +65,7 @@ function chartValue(value: number, unit: string | null): string {
   return unit === "USD" ? usd(Math.round(value * 100)) : `${value.toLocaleString("en-US")}${unit ? ` ${unit}` : ""}`;
 }
 
-function blockNodes(block: ContentBlock, organization: OrganizationProfile, sourceTitles: Map<string, string>): Array<Paragraph | Table> {
+function blockNodes(block: ContentBlock, organization: OrganizationProfile, sourceTitles: Map<string, string>, slots: WordChartSlots, dashboard: Dashboard | null): Array<Paragraph | Table> {
   const primary = hex(organization.brand.primaryColor);
   const nodes: Array<Paragraph | Table> = [];
   if (block.heading) nodes.push(para(block.heading, { heading: HeadingLevel.HEADING_1, color: primary, bold: true, size: 28, after: 60 }));
@@ -74,8 +75,14 @@ function blockNodes(block: ContentBlock, organization: OrganizationProfile, sour
   if (block.kind === "table") nodes.push(grid(block.columns, block.rows, primary), para("", { after: 120 }));
   if (block.kind === "chart" && block.chart) {
     const chart = block.chart;
+    // Channel series keep their dashboard colors; a single series uses the accent color.
+    const byName = new Map(dashboard?.channels.map((channel) => [channel.name.toLowerCase(), channel.color]) ?? []);
+    const colors = chart.series.length === 1 ? [hex(organization.brand.accentColor)]
+      : chart.series.every((series) => byName.has(series.name.toLowerCase())) ? chart.series.map((series) => byName.get(series.name.toLowerCase())!)
+      : [hex(organization.brand.accentColor), primary, "829AB1"];
+    nodes.push(chartSlot(slots, { type: "column", title: null, labels: chart.labels, series: chart.series, colors, money: chart.unit === "USD", widthIn: 6.3, heightIn: 2.9, legend: chart.series.length > 1 }));
     nodes.push(grid(["Series", ...chart.labels], chart.series.map((series) => [series.name, ...series.values.map((value) => chartValue(value, chart.unit))]), primary));
-    nodes.push(para("Chart data. The presentation contains the matching native, editable chart.", { italics: true, size: 18, color: MUTED }));
+    nodes.push(para("Chart values; the chart above is a native, editable Word chart.", { italics: true, size: 18, color: MUTED }));
   }
   return nodes;
 }
@@ -101,7 +108,9 @@ const NONE = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
 const NO_BORDERS = { top: NONE, bottom: NONE, left: NONE, right: NONE };
 const arrow = (direction: Direction) => (direction === "up" ? "▲ " : direction === "down" ? "▼ " : "");
 const trendColor = (direction: Direction) => (direction === "up" ? "129C86" : direction === "down" ? "D64545" : MUTED);
-const BAR_UNITS = 32;
+/** A paragraph that wordCharts.ts replaces with a native chart after the document is written. */
+const chartSlot = (slots: WordChartSlots, chart: WordChart) => new Paragraph({ keepNext: false, children: [new TextRun({ text: slots.add(chart) })] });
+const caption = (text: string) => new Paragraph({ keepNext: true, spacing: { before: 120, after: 40 }, children: [run(text, { size: 18, color: BODY_INK })] });
 
 function plainTable(widths: number[], rows: TableRow[], borders: Record<string, unknown> = {}): Table {
   return new Table({ layout: TableLayoutType.FIXED, columnWidths: widths, width: { size: CONTENT_WIDTH, type: WidthType.DXA }, borders: { top: NONE, bottom: NONE, left: NONE, right: NONE, insideHorizontal: NONE, insideVertical: NONE, ...borders }, rows });
@@ -113,7 +122,7 @@ const cell = (width: number, children: Paragraph[], options: { fill?: string; bo
 const line = (runs: TextRun[], after = 0, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType]) => new Paragraph({ spacing: { after, line: 240 }, alignment, children: runs });
 
 /** Template-style first page for sales reports: every value comes from the code-built dashboard. */
-function dashboardPage(product: WorkProduct, dashboard: Dashboard, organization: OrganizationProfile): Array<Paragraph | Table> {
+function dashboardPage(product: WorkProduct, dashboard: Dashboard, organization: OrganizationProfile, slots: WordChartSlots): Array<Paragraph | Table> {
   const primary = hex(organization.brand.primaryColor);
   const rule = { style: BorderStyle.SINGLE, size: 8, color: RULE };
   const headerW = Math.round(CONTENT_WIDTH * 0.68);
@@ -137,14 +146,12 @@ function dashboardPage(product: WorkProduct, dashboard: Dashboard, organization:
       cell(shareW[2]!, [line([run(`${arrow(channel.direction)}${channel.growthText}`, { bold: true, size: 18, color: trendColor(channel.direction) })], 0, AlignmentType.RIGHT)], { borders: { bottom: rule } }),
     ] })),
   ]);
-  const max = Math.max(...dashboard.channels.flatMap((channel) => channel.revenue), 0);
-  const barW = [Math.round(CONTENT_WIDTH * 0.26), Math.round(CONTENT_WIDTH * 0.56)];
-  barW.push(CONTENT_WIDTH - barW[0]! - barW[1]!);
-  const bars = plainTable(barW, dashboard.channels.flatMap((channel) => channel.revenue.map((value, month) => new TableRow({ cantSplit: true, children: [
-    cell(barW[0]!, [line([run(month === 0 ? channel.name : "", { bold: true, size: 18, color: channel.color }), run(`  ${dashboard.months[month]}`, { size: 16, color: MUTED })])]),
-    cell(barW[1]!, [line([run("█".repeat(max > 0 ? Math.max(value > 0 ? 1 : 0, Math.round((value / max) * BAR_UNITS)) : 0), { size: 16, color: month === 0 ? "BCCCDC" : channel.color })])]),
-    cell(barW[2]!, [line([run(usd(Math.round(value * 100)), { size: 18, color: DARK })], 0, AlignmentType.RIGHT)]),
-  ] }))));
+  const colors = dashboard.channels.map((channel) => channel.color);
+  const half = Math.floor(CONTENT_WIDTH / 2);
+  const charts = plainTable([half, CONTENT_WIDTH - half], [new TableRow({ cantSplit: true, children: [
+    cell(half, [caption("Revenue per channel by month"), chartSlot(slots, { type: "line", title: null, labels: dashboard.months, series: dashboard.channels.map((channel) => ({ name: channel.name, values: channel.revenue })), colors, money: true, widthIn: 3.25, heightIn: 2.35, legend: true })], { align: VerticalAlignTable.TOP }),
+    cell(CONTENT_WIDTH - half, [caption(`Revenue share, ${dashboard.months[1]}`), chartSlot(slots, { type: "doughnut", title: null, labels: dashboard.channels.map((channel) => channel.name), series: [{ name: "Revenue share", values: dashboard.channels.map((channel) => channel.revenue[1]) }], colors, money: true, widthIn: 3.25, heightIn: 2.35, legend: true })], { align: VerticalAlignTable.TOP }),
+  ] })]);
   return [
     header,
     new Paragraph({ spacing: { before: 240, after: 60 }, children: [run(product.title, { bold: true, size: 40, color: primary })] }),
@@ -152,13 +159,41 @@ function dashboardPage(product: WorkProduct, dashboard: Dashboard, organization:
     new Paragraph({ spacing: { after: 200 }, children: [run(`Prepared by ${organization.name} for internal review. Not sent to or accepted by any client.`, { size: 18, color: MUTED })] }),
     kpis,
     new Paragraph({ spacing: { before: 280, after: 120 }, keepNext: true, children: [run(dashboard.question, { bold: true, size: 26, color: DARK })] }),
+    charts,
     para("Revenue share per channel", { size: 20, color: BODY_INK, keepNext: true, after: 60 }),
     shares,
-    para(`Revenue per channel, ${dashboard.months[0]} (grey) and ${dashboard.months[1]} (color)`, { size: 20, color: BODY_INK, keepNext: true, after: 60 }),
-    bars,
     para(dashboard.note, { italics: true, size: 16, color: MUTED, after: 0 }),
     new Paragraph({ children: [new PageBreak()] }),
   ];
+}
+
+/**
+ * Report body. In a sales report the channel table is followed by a horizontal channel chart and the table with an
+ * orders column by an orders chart, as in the deck; if the content has no such tables they close the body instead.
+ */
+function bodyWithCharts(product: WorkProduct, organization: OrganizationProfile, sourceTitles: Map<string, string>, slots: WordChartSlots, sales: Dashboard | null): Array<Paragraph | Table> {
+  const nodes: Array<Paragraph | Table> = [];
+  if (!sales) return product.blocks.flatMap((block) => blockNodes(block, organization, sourceTitles, slots, null));
+  const primary = hex(organization.brand.primaryColor);
+  const channels = [...sales.channels].reverse();
+  const channelChart = () => [caption(`Revenue per channel, ${sales.months[0]} vs ${sales.months[1]} (USD)`), chartSlot(slots, {
+    type: "barH", title: null, labels: channels.map((channel) => channel.name), series: sales.months.map((month, index) => ({ name: month, values: channels.map((channel) => channel.revenue[index]!) })),
+    colors: ["BCCCDC", primary], money: true, widthIn: 6.3, heightIn: Math.min(4.2, 1.3 + 0.55 * channels.length), legend: true,
+  })];
+  const ordersChart = () => [caption("Orders per month"), chartSlot(slots, {
+    type: "area", title: null, labels: sales.months, series: [{ name: "Orders", values: sales.orders }], colors: [hex(organization.brand.accentColor)], money: false, widthIn: 6.3, heightIn: 2.4, legend: false,
+  })];
+  let channelsDone = false;
+  let ordersDone = false;
+  for (const block of product.blocks) {
+    nodes.push(...blockNodes(block, organization, sourceTitles, slots, sales));
+    if (block.kind !== "table") continue;
+    if (!channelsDone && sales.channels.some((channel) => block.rows.some((row) => row[0] === channel.name))) { nodes.push(...channelChart()); channelsDone = true; }
+    if (!ordersDone && block.columns.some((column) => /orders/i.test(column))) { nodes.push(...ordersChart()); ordersDone = true; }
+  }
+  if (!channelsDone) nodes.push(...channelChart());
+  if (!ordersDone) nodes.push(...ordersChart());
+  return nodes;
 }
 
 export async function renderDocx(product: WorkProduct, sources: SourceDocument[], organization: OrganizationProfile, dashboard: Dashboard | null = null): Promise<Uint8Array> {
@@ -166,14 +201,16 @@ export async function renderDocx(product: WorkProduct, sources: SourceDocument[]
     const font = organization.brand.fontFamily;
     const primary = hex(organization.brand.primaryColor);
     const sourceTitles = new Map(sources.map((source) => [source.id, source.filename ?? source.title]));
-    const opening: Array<Paragraph | Table> = dashboard && product.kind === "report" ? dashboardPage(product, dashboard, organization) : [
+    const slots = new WordChartSlots();
+    const sales = dashboard && product.kind === "report" ? dashboard : null;
+    const opening: Array<Paragraph | Table> = sales ? dashboardPage(product, sales, organization, slots) : [
       new Paragraph({ spacing: { before: 600, after: 160 }, children: [run(product.title, { bold: true, size: 44, color: primary })] }),
       ...(product.subtitle ? [new Paragraph({ spacing: { after: 120 }, children: [run(product.subtitle, { italics: true, size: 26, color: MUTED })] })] : []),
       new Paragraph({ spacing: { after: 480 }, border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: hex(organization.brand.accentColor), space: 8 } }, children: [run(`Prepared by ${organization.name} for internal review. Not sent to or accepted by any client.`, { size: 20, color: MUTED })] }),
     ];
     const content: Array<Paragraph | Table> = [
       ...opening,
-      ...product.blocks.flatMap((block) => blockNodes(block, organization, sourceTitles)),
+      ...bodyWithCharts(product, organization, sourceTitles, slots, sales),
       para("Working assumptions", { heading: HeadingLevel.HEADING_1, color: primary, bold: true, size: 28 }),
       ...product.assumptions.map((item) => para(item, { bullet: true, after: 80 })),
       ...(product.warnings.length ? [para("Warnings", { heading: HeadingLevel.HEADING_1, color: primary, bold: true, size: 28 }), ...product.warnings.map((item) => para(item, { bullet: true, after: 80 }))] : []),
@@ -190,7 +227,7 @@ export async function renderDocx(product: WorkProduct, sources: SourceDocument[]
         children: content,
       }],
     });
-    return new Uint8Array(await Packer.toBuffer(doc));
+    return await embedCharts(new Uint8Array(await Packer.toBuffer(doc)), slots, font);
   } catch (error) {
     throw new EngineError("EXPORT_FAILED", `DOCX export failed: ${error instanceof Error ? error.name : "unknown error"}`, false);
   }

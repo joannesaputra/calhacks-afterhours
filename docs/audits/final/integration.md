@@ -146,6 +146,20 @@ answered in the UI): revision 2 `ready` in one Opus call (32.7 s, 5,470 / 4,227 
 report page 1 rendered with the calculated values (PowerPoint PDF; Word page 1 via Quick Look). The 60 s per-call limit
 was not reached. Afterwards Automation off, `GENERATION_MODE=fixture`, app stopped.
 
+## Native charts in the Word sales report (2026-10-25)
+
+The sales report DOCX now carries the deck's charts as native, editable Word charts (page 1: revenue per channel line
+chart and share doughnut; body: revenue column chart, horizontal channel bars after the channel table, orders area chart
+after the monthly table). `packages/engine/src/render/wordCharts.ts` builds each chart with the deck's pptxgenjs chart
+code and moves the chart part and its embedded workbook into the DOCX (`word/charts/chartN.xml`, `word/embeddings/chartN.xlsx`,
+document relationship and content type). Opened in Microsoft Word on Joanne's Mac: 5 inline charts, no repair prompt.
+Proposals carry no charts.
+
+**QA harness B3 needs a one-line update (owner: Darren).** `tests/system/02-canonical-flows.test.mjs` B3 asserts the report
+DOCX has no native chart part ("observed fact, data table instead"). That is now intentionally false; the other 52 checks
+pass. Suggested change: assert `charts.length === 5` (or `> 0`) and rename the test to "report DOCX carries native chart
+parts". Until then the harness reports 52/53.
+
 ## Gmail setup for Darren (no secrets here)
 
 1. Google Cloud project → enable **Gmail API**.

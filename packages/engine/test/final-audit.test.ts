@@ -218,3 +218,38 @@ describe("fuller slides: chart bands from calculated data and card layouts, with
     for (const n of [2, 3, 4, 5]) expect(slideXml(pptx, n)).toContain('prst="roundRect"');
   });
 });
+
+describe("Word sales report carries the deck's charts as native, editable Word charts", () => {
+  it("five chart parts with their workbooks, wired into the document, values from the calculated metrics", async () => {
+    const result = await ready(await inputFor("report"));
+    const docx = unzip(result.files.find((file) => file.format === "docx")!.bytes);
+    const charts = [...docx.keys()].filter((name) => /^word\/charts\/chart\d+\.xml$/.test(name)).sort();
+    expect(charts).toHaveLength(5);
+    const types = text(docx.get("[Content_Types].xml")!);
+    const rels = text(docx.get("word/_rels/document.xml.rels")!);
+    const documentXml = text(docx.get("word/document.xml")!);
+    expect(documentXml).not.toContain("AFTERHOURS-CHART");
+    for (const name of charts) {
+      expect(types).toContain(`PartName="/${name}"`);
+      expect(rels).toContain(`Target="${name.replace("word/", "")}"`);
+      const n = name.match(/chart(\d+)\.xml$/)![1];
+      expect(documentXml).toContain(`r:id="rIdAhChart${n}"`);
+      expect(text(docx.get(`word/charts/_rels/chart${n}.xml.rels`)!)).toContain(`../embeddings/chart${n}.xlsx`);
+      expect(docx.has(`word/embeddings/chart${n}.xlsx`)).toBe(true);
+    }
+    const xml = charts.map((name) => text(docx.get(name)!));
+    expect(xml.some((chart) => chart.includes("<c:lineChart>") && /<c:v>8000<\/c:v>[\s\S]*<c:v>10000<\/c:v>/.test(chart))).toBe(true);
+    expect(xml.some((chart) => chart.includes("<c:doughnutChart>"))).toBe(true);
+    expect(xml.some((chart) => chart.includes('<c:barDir val="col"/>') && /<c:v>12000<\/c:v>[\s\S]*<c:v>15000<\/c:v>/.test(chart))).toBe(true);
+    expect(xml.some((chart) => chart.includes('<c:barDir val="bar"/>'))).toBe(true);
+    expect(xml.some((chart) => chart.includes("<c:areaChart>") && /<c:v>120<\/c:v>[\s\S]*<c:v>150<\/c:v>/.test(chart))).toBe(true);
+    // Page 1 order: the dashboard charts sit before the report body.
+    expect(documentXml.indexOf('r:id="rIdAhChart1"')).toBeLessThan(documentXml.indexOf("Executive summary"));
+  });
+
+  it("proposals stay chart-free", async () => {
+    const result = await ready(await inputFor("proposal"));
+    const docx = unzip(result.files.find((file) => file.format === "docx")!.bytes);
+    expect([...docx.keys()].filter((name) => name.startsWith("word/charts/"))).toHaveLength(0);
+  });
+});
