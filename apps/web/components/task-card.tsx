@@ -6,7 +6,7 @@ import { describeError } from "@/lib/api";
 import { formatElapsed, formatRelative } from "@/lib/format";
 import { OUTPUT_LABEL, STAGE_LABEL, isActive, isConfigError } from "@/lib/labels";
 import { useNow, useRetry, useTask } from "@/lib/hooks";
-import { GenerationBadge, IngestionBadge, StatusBadge } from "./badges";
+import { StatusBadge } from "./badges";
 import { useShell } from "./shell";
 import { useToast } from "./providers";
 
@@ -70,8 +70,6 @@ export function TaskCard({ task, nowMs }: { task: TaskSummary; nowMs: number }) 
         <span className="muted" title="When the original email was sent (taken from the email itself)">Email sent {formatRelative(task.receivedAt, nowMs)}</span>
       </p>
       <div className="chips">
-        <IngestionBadge mode={task.ingestionMode} />
-        <GenerationBadge mode={task.generationMode} />
         {task.requestedOutputs.map((o) => <span key={o} className="badge badge-neutral">{OUTPUT_LABEL[o]}</span>)}
         {task.warningCount > 0 && <span className="badge badge-warn"><TriangleAlert size={14} aria-hidden />{task.warningCount} warning{task.warningCount === 1 ? "" : "s"}</span>}
       </div>
