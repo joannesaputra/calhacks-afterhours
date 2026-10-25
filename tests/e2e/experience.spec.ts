@@ -303,6 +303,15 @@ test("12. keyboard: source dialog opens and closes with focus restored, and revi
   await expect(statusBadge(page, "ready")).toBeVisible({ timeout: 90_000 });
   const chip = page.locator(".doc-page .chip").first();
   await chip.focus();
+  // The focus ring must be visible on the white paper preview (WCAG 1.4.11: at least 3:1 against what surrounds it).
+  const ring = await chip.evaluate((el) => {
+    const rgb = (c: string) => (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const lum = (c: number[]) => c.map((v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i]!, 0);
+    const [a, b] = [lum(rgb(getComputedStyle(el).outlineColor)), lum(rgb(getComputedStyle(el.closest(".doc-page")!).backgroundColor))].sort((x, y) => y - x);
+    return { focusVisible: el.matches(":focus-visible"), ratio: (a! + 0.05) / (b! + 0.05) };
+  });
+  expect(ring.focusVisible).toBe(true);
+  expect(ring.ratio).toBeGreaterThanOrEqual(3);
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");

@@ -101,11 +101,23 @@ export function proposalProducts(input: EngineInput, sources: SourceDocument[], 
 const pctText = (value: number | null) => value === null ? "not computable (zero starting value)" : `${Math.abs(displayPercent(value))}%`;
 function change(value: number | null, delta: number, noun: string): string {
   if (delta === 0) return `${noun} was unchanged`;
+  if (value === null) return `${noun} rose from zero, so no percent change is defined`;
   return `${noun} ${delta > 0 ? "increased" : "decreased"} ${pctText(value)}`;
 }
 
+/** A channel's share of a month's revenue; a month with no revenue has no shares. */
+const shareText = (value: number | null) => value === null ? "not defined (no revenue that month)" : `${value}%`;
+
 /** "A to B", or "A in both months" when unchanged. */
 const span = (from: string, to: string) => from === to ? `${from} in both months` : `${from} to ${to}`;
+
+function shareSentence(channel: SalesMetrics["channels"][number], month1: string, label1: string, month2: string, label2: string): string {
+  const [s1, s2] = [channel.sharePercent[month1] ?? null, channel.sharePercent[month2] ?? null];
+  if (s1 !== null && s2 !== null) return `${channel.channel} represented ${s1}% of revenue in ${label1} and ${s2}% in ${label2}; shares are rounded to one decimal place.`;
+  if (s1 === null && s2 === null) return `${label1} and ${label2} had no recorded revenue, so no channel shares are defined.`;
+  const [empty, known, share] = s1 === null ? [label1, label2, s2] : [label2, label1, s1];
+  return `${empty} had no recorded revenue, so no channel shares are defined for it; ${channel.channel} represented ${share}% of revenue in ${known}.`;
+}
 
 export function reportTitle(metrics: SalesMetrics): string {
   const [first, second] = metrics.months;
@@ -136,20 +148,20 @@ export function reportProducts(input: EngineInput, sources: SourceDocument[], pl
     chart,
     table(`${productId}-monthly`, "Monthly performance", ["Month", "Revenue", "Orders", "Average order value"], metrics.months.map((item) => [monthLabel(item.month), usd(item.revenueMinor), String(item.orders), aov(item.averageOrderValueMinor)]), "calculated", dataRef),
     table(`${productId}-channels`, "Channel revenue", ["Channel", m1, m2, "Change"], byRevenue.map((channel) => [channel.channel, usd(channel.values[first!.month]!), usd(channel.values[second!.month]!), channel.values[first!.month] === channel.values[second!.month] ? "Unchanged" : channel.growthPercent === null ? "Not computable" : `${channel.growthPercent > 0 ? "+" : "-"}${pctText(channel.growthPercent)}`]), "calculated", dataRef),
-    paragraph(`${productId}-share`, "Channel mix", topTied ? `Several channels tied for the largest share of revenue in ${m2}; the channel table lists each channel's revenue.` : `${top.channel} represented ${top.sharePercent[first!.month]}% of revenue in ${m1} and ${top.sharePercent[second!.month]}% in ${m2}; shares are rounded to one decimal place.`, "calculated", dataRef),
+    paragraph(`${productId}-share`, "Channel mix", topTied ? `Several channels tied for the largest share of revenue in ${m2}; the channel table lists each channel's revenue.` : shareSentence(top, first!.month, m1, second!.month, m2), "calculated", dataRef),
     bullets(`${productId}-limits`, "Limitations", ["The dataset does not include campaign exposure, cost, margin, returns, or customer identifiers.", "ROAS, profit, retention, CAC, and conversion rate cannot be calculated.", "The change is an observation; the data does not establish causality."], "source", dataRef),
     bullets(`${productId}-recommend`, "Recommended next steps", ["Continue monthly revenue and order tracking by channel.", "Add campaign cost and exposure fields before evaluating marketing efficiency.", "Document returns and margin definitions before profit analysis."], "recommendation"),
   ];
   const deckId = stableId(input.taskId, input.revision, "presentation", 0);
   const channelBlocks: ContentBlock[] = metrics.channels.length <= 2
-    ? byRevenue.map((channel, index) => bullets(`${deckId}-3${index}`, channel.channel, [`${m1}: ${usd(channel.values[first!.month]!)}`, `${m2}: ${usd(channel.values[second!.month]!)}`, `Share in ${m2}: ${channel.sharePercent[second!.month]}%`], "calculated", dataRef))
+    ? byRevenue.map((channel, index) => bullets(`${deckId}-3${index}`, channel.channel, [`${m1}: ${usd(channel.values[first!.month]!)}`, `${m2}: ${usd(channel.values[second!.month]!)}`, `Share in ${m2}: ${shareText(channel.sharePercent[second!.month] ?? null)}`], "calculated", dataRef))
     : [table(`${deckId}-3t`, metrics.channels.length > 6 ? "Revenue by channel (largest six; all in the report)" : "Revenue by channel", ["Channel", m1, m2], byRevenue.slice(0, 6).map((channel) => [channel.channel, usd(channel.values[first!.month]!), usd(channel.values[second!.month]!)]), "calculated", dataRef)];
   const revenueTitle = change(metrics.revenueGrowthPercent, metrics.revenueChangeMinor, "Revenue");
   const slides: SlideContent[] = [
     slide(`${deckId}-1`, `${period} sales update`, "title", [paragraph(`${deckId}-1a`, "Dataset scope", `Revenue and orders by channel: ${sentenceList(byRevenue.slice(0, 4).map((channel) => channel.channel), true)}${byRevenue.length > 4 ? ", and others" : ""}`, "calculated", dataRef)], "All values are calculated in code from the attached CSV."),
     slide(`${deckId}-2`, revenueTitle, "chart", [{ ...chart, id: `${deckId}-2a` }], `${revenueLine} Causality is not established.`),
     slide(`${deckId}-3`, "Channel performance", metrics.channels.length === 2 ? "two_column" : "bullets", channelBlocks, metrics.channels.length > 6 ? "Only the six largest channels are shown; the report lists every channel." : "Values are channel revenue sums from the CSV."),
-    slide(`${deckId}-4`, "Orders and order value", "bullets", [bullets(`${deckId}-4a`, "Key metrics", [`Orders: ${first!.orders} to ${second!.orders} (${change(metrics.orderGrowthPercent, metrics.orderChange, "orders")})`, `Average order value: ${span(aov(first!.averageOrderValueMinor), aov(second!.averageOrderValueMinor))}`, topTied ? "Several channels tied for the largest revenue share" : `${top.channel} share of revenue: ${span(`${top.sharePercent[first!.month]}%`, `${top.sharePercent[second!.month]}%`)}`], "calculated", dataRef)], "Average order value is revenue divided by orders for each month."),
+    slide(`${deckId}-4`, "Orders and order value", "bullets", [bullets(`${deckId}-4a`, "Key metrics", [`Orders: ${first!.orders} to ${second!.orders} (${change(metrics.orderGrowthPercent, metrics.orderChange, "orders")})`, `Average order value: ${span(aov(first!.averageOrderValueMinor), aov(second!.averageOrderValueMinor))}`, topTied ? "Several channels tied for the largest revenue share" : `${top.channel} share of revenue: ${span(shareText(top.sharePercent[first!.month] ?? null), shareText(top.sharePercent[second!.month] ?? null))}`], "calculated", dataRef)], "Average order value is revenue divided by orders for each month."),
     slide(`${deckId}-5`, "Limits and next steps", "closing", [bullets(`${deckId}-5a`, "Keep the interpretation bounded", ["Do not infer campaign causality", "Add cost and exposure data", "Track margin and returns", "Continue channel-level monitoring"], "recommendation")], "ROAS, CAC, profit, retention, and conversion are not computable from this dataset."),
   ];
   return [

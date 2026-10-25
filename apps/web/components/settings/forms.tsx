@@ -125,11 +125,11 @@ export function AutomationForm({ settings }: { settings: WorkspaceSettings }) {
     >
       <label className="switch">
         <input type="checkbox" role="switch" checked={draft.automationEnabled} onChange={(e) => { save.touch(); setDraft((d) => ({ ...d, automationEnabled: e.target.checked })); }} />
-        <span><strong>Automation enabled</strong><span className="muted small block">When off, new messages are not processed.</span></span>
+        <span><strong>Automation enabled</strong><span className="muted small block">When off, Gmail is not checked. Approved senders’ messages that arrive meanwhile are picked up when you turn it back on.</span></span>
       </label>
       <label className="switch">
         <input type="checkbox" role="switch" checked={draft.autoPrepare} onChange={(e) => { save.touch(); setDraft((d) => ({ ...d, autoPrepare: e.target.checked })); }} />
-        <span><strong>Prepare work automatically</strong><span className="muted small block">Start preparing as soon as an approved sender’s request arrives. Preparing never sends anything.</span></span>
+        <span><strong>Prepare work automatically</strong><span className="muted small block">Start preparing as soon as an approved sender’s request arrives. Preparing never sends anything. When off, those requests are skipped and are not kept to prepare later.</span></span>
       </label>
       <Field id="sender-input" label="Approved senders" error={inputError} hint="Exact addresses only. They are lower-cased.">
         <div className="add-row">

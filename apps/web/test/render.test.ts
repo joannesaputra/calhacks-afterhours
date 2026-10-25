@@ -128,7 +128,11 @@ describe("SourceDialog", () => {
 describe("helpers", () => {
   it("accepts only same-origin relative return paths", () => {
     expect(safeReturnTo("/tasks/abc?x=1")).toBe("/tasks/abc?x=1");
-    for (const bad of ["https://evil.example", "//evil.example", "/\\evil", "javascript:alert(1)", "/login", "", null, undefined, "/a\nb"]) {
+    // Encoded slashes stay inside the path: the browser does not decode them into a protocol-relative URL.
+    expect(new URL(safeReturnTo("/%2F%2Fevil.example"), "http://localhost:3000").origin).toBe("http://localhost:3000");
+    expect(new URL(safeReturnTo("/%5C%5Cevil.example"), "http://localhost:3000").origin).toBe("http://localhost:3000");
+    for (const bad of ["https://evil.example", "//evil.example", "/\\evil", "javascript:alert(1)", "/login", "", null, undefined, "/a\nb",
+      "data:text/html,x", "%2F%2Fevil.example", "\\\\evil.example", "/\t/evil.example", "/login?returnTo=%2Ftasks", 42, {}]) {
       expect(safeReturnTo(bad as string | null | undefined)).toBe("/");
     }
   });
