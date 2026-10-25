@@ -12,7 +12,7 @@ Corepack). Date: 2026-10-24. Branch `audit/final-all`. No teammate prompt was ne
 | FULL EXPORTED FILE VISUAL REVIEW | **PARTIAL**: all 30 slides of 6 decks PASS in Microsoft PowerPoint; DOCX page 1 only (Quick Look); full DOCX pages **NOT RUN** | Word and Pages AppleScript export both fail on this machine (-1708) |
 | GMAIL OAUTH CONNECTION | **PASS** (Joanne's machine, one account; added after the audit) | `integration.md` "Live Gmail check" |
 | REAL GMAIL EMAIL → QUEUED TASK | **PASS** (one email, zero model calls) | task `e8ec9d9e-…`, repeat poll created nothing |
-| GMAIL → LIVE CLAUDE → FILES | **NOT RUN** | needs a separate, explicit paid authorization |
+| GMAIL → LIVE CLAUDE → FILES | **PASS** (one proposal, added after the audit, authorized by Joanne) | task `d6c264d8-…`: 1 call, 5 slides, hashes match; `integration.md` |
 | LIVE WHATSAPP DELIVERY | **NOT RUN** | adapter tests with fake provider only |
 | OVERNIGHT/REMOTE OPERATION | **NOT RUN** | no always-on host, no Docker here |
 

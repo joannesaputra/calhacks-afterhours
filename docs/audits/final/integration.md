@@ -37,7 +37,7 @@ Full findings and the 44 answers: `docs/audits/final/audit.md`. The historical l
 | Browser workflow and persisted review | **PASS** | browser 1, 3, 8, 13; QA restart |
 | Gmail OAuth connection | **PASS (Joanne's machine, one account)** | see "Live Gmail check" below; Darren's machine still needs its own client or connection |
 | Real Gmail email → queued task | **PASS (one email)** | `pnpm gmail:poll-once`: 1 task queued, repeat 0, zero model calls; see below |
-| Gmail → live Claude → verified files | **NOT RUN** | needs a separate paid authorization |
+| Gmail → live Claude → verified files | **PASS (one proposal, Joanne's machine)** | authorized by Joanne; see "Gmail → live Claude run" below |
 | Live WhatsApp delivery | **NOT RUN** | adapter tests with fake provider only |
 | Docker/remote deployment | **NOT RUN** | Docker not installed here; no host |
 | Actual unattended overnight operation | **NOT RUN** | no always-on host |
@@ -65,6 +65,31 @@ OAuth connection verified; one real email reached the queue. This is not Gmail �
 - Automation turned off afterwards. The task stays queued and unexecuted. Running it later in fixture mode needs a worker;
   a live Claude run needs a new task ingested in live mode (mode is snapshotted) and separate paid authorization.
 - Model calls: 0. Sends: 0.
+
+## Gmail → live Claude run (2026-10-24, code `70de6a0`, authorized by Joanne)
+
+- Clean queue first: the earlier fixture Gmail task was run once with `worker:once` in fixture mode (free) → `needs_input`
+  (the fixture engine only knows the demo scenarios). Queue then empty.
+- `.env` switched to `GENERATION_MODE=live`, `MODEL_PROVIDER=anthropic`, `MODEL_NAME=claude-sonnet-5-5` (key pasted by
+  Joanne, never displayed). Automation on, one new self-sent synthetic email ("AfterHours live test — Maple & Moss
+  proposal"). `pnpm gmail:poll-once` → 1 task `d6c264d8-6e14-4850-8fdc-7cc063e9715b`, `gmail`, `live`, queued; it was the
+  only queued job.
+- `pnpm worker:once` → `ready` in 26.3 s. **Provider usage: 1 call (generate), no repair, 5,071 input / 4,648 output
+  tokens.** Notification `simulated` (outbox). No email or message sent.
+- Files (authenticated download through the web proxy = stored bytes):
+  `Proposal-for-Maple-Moss-Brand-Positioning-Audience-Research-and-Launch-Roadmap-r1.docx` 11,311 B `e318e4ec48261d95…`;
+  `Maple-Moss-Brand-Positioning-Audience-Research-and-Launch-Roadmap-r1.pptx` 99,520 B `80dce910bdeb30d3…`, exactly 5 slide
+  parts. Copies in gitignored `var/final-audit/live-gmail/`.
+- Content vs the email: client, agency, "sustainable lifestyle brand", scope (positioning, audience research, launch
+  roadmap), USD 6,000, four weeks from October 26, 2026, exclusions (paid advertising spend, campaign execution) and the
+  payment-milestone open item all match; slides follow the requested order (overview, objectives, scope, timeline and
+  fee, next steps); objectives and next steps are labelled RECOMMENDATION; one assumption cites Harbor Creative's own
+  standard exclusions (organization profile). No end date was stated or invented. Due date shown in the task (Oct 26,
+  9:00 AM PDT), not in the files. Quotes are exact substrings (checked by the engine's grounding verifier).
+- Visual: all 5 slides rendered in Microsoft PowerPoint → PDF: no overflow or clipping. DOCX page 1 via Quick Look:
+  readable; pages 2+ not rendered (same Word tooling gap as O2).
+- Afterwards: Automation off, `GENERATION_MODE=fixture` in `.env`. Cosmetic: the DOCX subtitle and the standard
+  "Prepared by … internal review" line say nearly the same thing.
 
 ## Gmail setup for Darren (no secrets here)
 
