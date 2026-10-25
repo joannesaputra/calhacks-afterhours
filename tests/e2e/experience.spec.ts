@@ -244,7 +244,7 @@ test("9. queue and detail are usable on a phone-sized screen", async ({ browser,
   const noOverflow = async () => expect(await m.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
   await m.goto(`${BASE}/`);
-  await expect(m.getByRole("heading", { name: "Work queue" })).toBeVisible();
+  await expect(m.getByRole("heading", { name: "Ready for review" })).toBeVisible();
   await noOverflow();
   await m.goto(`${BASE}/tasks/${taskId}`);
   await expect(statusBadge(m, "ready")).toBeVisible({ timeout: 90_000 });
@@ -464,7 +464,7 @@ test("19. very long titles, filenames, text and tables wrap on a phone and keep 
   expect(box!.x + box!.width).toBeLessThanOrEqual(390);
   await m.getByRole("button", { name: /^Download/ }).first().scrollIntoViewIfNeeded();
   await m.goto(`${BASE}/`);
-  await expect(m.getByRole("heading", { name: "Work queue" })).toBeVisible();
+  await expect(m.getByRole("heading", { name: "Ready for review" })).toBeVisible();
   expect(await m.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   await ctx.close();
 });
@@ -623,7 +623,7 @@ test("25. logout revokes the session and the private queue is no longer reachabl
   // Own login (not the cached one other tests use), because logout revokes it on the server.
   expect((await p.request.post(`${BASE}/api/session`, { headers: { origin, "content-type": "application/json" }, data: { password: PASSWORD } })).ok()).toBe(true);
   await p.goto(`${BASE}/`);
-  await expect(p.getByRole("heading", { name: "Work queue" })).toBeVisible();
+  await expect(p.getByRole("heading", { name: "Ready for review" })).toBeVisible();
   const held = await ctx.cookies();
   await p.getByRole("button", { name: "Sign out" }).click();
   await p.waitForURL(/\/login/);

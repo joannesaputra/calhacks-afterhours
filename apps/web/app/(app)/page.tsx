@@ -1,17 +1,19 @@
 "use client";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useShell } from "@/components/shell";
 import { DemoMenu } from "@/components/demo-menu";
 import { TaskCard } from "@/components/task-card";
 import { EmptyPanel, ErrorPanel, SkeletonCards } from "@/components/states";
 import { useNow, useTaskList } from "@/lib/hooks";
-import { FILTERS, sortForQueue, type QueueFilter } from "@/lib/labels";
+import { FILTERS, filterHref, parseFilter, sortForQueue, type QueueFilter } from "@/lib/labels";
 
-export default function QueuePage() {
+function Queue() {
+  const router = useRouter();
   const { demoEnabled, integrations } = useShell();
   const list = useTaskList();
-  const [filter, setFilter] = useState<QueueFilter>("all");
+  const filter = parseFilter(useSearchParams().get("filter"));
   const now = useNow(true, 30_000);
 
   const items = useMemo(() => sortForQueue(list.data?.items ?? []), [list.data]);
@@ -28,7 +30,7 @@ export default function QueuePage() {
     <>
       <div className="page-head">
         <div>
-          <h1>Work queue</h1>
+          <h1>{active.id === "all" ? "Work queue" : active.label}</h1>
           <p className="muted">
             {list.data
               ? readyCount > 0
@@ -42,7 +44,7 @@ export default function QueuePage() {
 
       <div className="filters" role="group" aria-label="Filter tasks">
         {FILTERS.map((f) => (
-          <button key={f.id} type="button" className="filter" aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
+          <button key={f.id} type="button" className="filter" aria-pressed={filter === f.id} onClick={() => router.replace(filterHref(f.id))}>
             {f.label}{list.data ? <span className="count">{counts[f.id]}</span> : null}
           </button>
         ))}
@@ -74,5 +76,13 @@ export default function QueuePage() {
         {shown.map((t) => <TaskCard key={t.id} task={t} nowMs={now} />)}
       </div>
     </>
+  );
+}
+
+export default function QueuePage() {
+  return (
+    <Suspense fallback={<SkeletonCards />}>
+      <Queue />
+    </Suspense>
   );
 }

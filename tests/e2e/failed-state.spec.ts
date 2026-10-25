@@ -32,7 +32,7 @@ test("17. an unconfigured live model fails honestly, points to Settings, and a d
   await expect(page.getByRole("tabpanel").getByText("revision 2").first()).toBeVisible();
 
   // The queue card tells the same story and offers settings, not a retry loop.
-  await page.goto(`${FAIL_BASE}/`);
+  await page.goto(`${FAIL_BASE}/?filter=failed`);
   await expect(page.getByRole("article").first()).toContainText("MODEL_NOT_CONFIGURED");
   await expect(page.getByRole("article").first().getByRole("link", { name: "Check settings" })).toBeVisible();
 });

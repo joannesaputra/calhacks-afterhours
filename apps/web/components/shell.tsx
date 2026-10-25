@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState, type MouseEvent, type R
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bell, FlaskConical, Inbox, LogOut, Settings, Cpu, Mail, WifiOff } from "lucide-react";
+import { AlertTriangle, FlaskConical, LogOut, Cpu, Mail, WifiOff } from "lucide-react";
 import type { IntegrationStatus } from "@afterhours/contracts";
 import { api, describeError } from "@/lib/api";
 import { useIntegrations, useSession } from "@/lib/hooks";
@@ -11,6 +11,7 @@ import { formatDateTime } from "@/lib/format";
 import { useGuard, useToast } from "./providers";
 import { BrandMark } from "./brand";
 import { ErrorPanel } from "./states";
+import { SidebarNav } from "./sidebar-nav";
 
 interface ShellState {
   demoEnabled: boolean;
@@ -22,11 +23,6 @@ const ShellContext = createContext<ShellState>({ demoEnabled: false, integration
 export const useShell = () => useContext(ShellContext);
 
 const APP_NAME = "AfterHours";
-const NAV = [
-  { href: "/", label: "Work queue", icon: Inbox },
-  { href: "/notifications", label: "Notifications", icon: Bell },
-  { href: "/settings", label: "Settings", icon: Settings },
-] as const;
 
 export function ModeBadge({ integrations }: { integrations: IntegrationStatus | undefined }) {
   if (!integrations) return <span className="badge badge-neutral">Checking mode…</span>;
@@ -127,19 +123,7 @@ export function AppShell({ demoEnabled, children }: { demoEnabled: boolean; chil
             <span className="brand-sub">Work ready for review</span>
           </div>
           <nav aria-label="Main">
-            <ul>
-              {NAV.map(({ href, label, icon: Icon }) => {
-                const active = href === "/" ? pathname === "/" || pathname.startsWith("/tasks") : pathname.startsWith(href);
-                return (
-                  <li key={href}>
-                    <Link href={href} className="nav-link" aria-current={active ? "page" : undefined} onClick={guardedNav}>
-                      <Icon size={18} aria-hidden />
-                      <span>{label}</span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+            <SidebarNav onNavigate={guardedNav} />
           </nav>
           <button type="button" className="nav-link nav-logout" onClick={logout}>
             <LogOut size={18} aria-hidden />

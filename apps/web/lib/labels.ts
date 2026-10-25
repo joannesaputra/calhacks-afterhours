@@ -43,6 +43,13 @@ export const FILTERS: Array<{ id: QueueFilter; label: string; statuses: TaskStat
   { id: "done", label: "Completed / archived", statuses: ["approved", "dismissed", "skipped"] },
 ];
 
+export const DEFAULT_FILTER: QueueFilter = "ready";
+export const parseFilter = (v: string | null | undefined): QueueFilter => FILTERS.find((f) => f.id === v)?.id ?? DEFAULT_FILTER;
+export const filterHref = (id: QueueFilter) => (id === DEFAULT_FILTER ? "/" : `/?filter=${id}`);
+
+/** A notification the person should look at soon: it was not sent, or sending failed. */
+export const isUrgentNotification = (n: Pick<NotificationRecord, "state">) => n.state === "failed" || n.state === "blocked";
+
 /** Default order: results to review first, then active, then needing input, then everything else. */
 const RANK: Record<TaskStatus, number> = {
   ready: 0, running: 1, planning: 1, queued: 1, needs_input: 2, failed: 3, skipped: 4, approved: 5, dismissed: 5,
