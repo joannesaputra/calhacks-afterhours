@@ -213,7 +213,7 @@ describe("E/F/L. no_action, dedupe, state guards, failure, restart (real HTTP, r
 
 describe("F. failure and retry with live mode and no credentials (explicit, honest failure; no fixture fallback)", () => {
   let s;
-  before(async () => { s = await startStack({ env: { GENERATION_MODE: "live", MODEL_PROVIDER: "openai" } }); });
+  before(async () => { s = await startStack({ env: { GENERATION_MODE: "live", MODEL_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "", MODEL_NAME: "" } }); });
   after(async () => { await s?.stop(); });
 
   it("integrations discloses live mode with configured=false", async () => {
