@@ -6,7 +6,7 @@ import { abortIfNeeded, EngineError } from "./errors";
 import { verifyProducts, type VerifyContext } from "./grounding";
 import { safeFilename, stableId } from "./ids";
 import { generateLive } from "./live";
-import { allAmbiguousAnswers, classify, makePlan, requestedSlideCount, unusableAnswers } from "./planning";
+import { allAmbiguousAnswers, classify, hasRequestText, makePlan, noRequestPlan, requestedSlideCount, unusableAnswers } from "./planning";
 import type { ModelClient, ModelLimits } from "./providers/model";
 import { liveClientFromEnv } from "./providers/env";
 import { renderDocx } from "./render/docx";
@@ -62,6 +62,13 @@ export async function execute(inputValue: EngineInput, deps: EngineDependencies,
   await emit({ stage: "extract", message: "Normalizing email, organization context, answers, and attachments." });
   const { sources, warnings } = buildSources(input, signal);
   for (const source of sources) if (source.kind !== "organization" && INSTRUCTION_LIKE.test(source.text)) warnings.push(`${source.title} contains instruction-like text; it was treated as data and did not change engine policy.`);
+  // An email with no subject or text asks for nothing, whatever its attachments say. Ask before any model call, so an
+  // attached brief or dataset is never turned into a deliverable nobody requested.
+  if (!hasRequestText(input) && !input.answers.some((answer) => answer.answer.trim())) {
+    const plan = noRequestPlan(sources);
+    await emit({ stage: "plan", message: "The email has no subject or message text; asking what work is requested before preparing anything.", plan });
+    return { outcome: "needs_input", plan, sources, questions: plan.questions, warnings };
+  }
   const deadlines = resolveDeadlines(input.email.bodyText, input.email.receivedAt, input.organization.timezone);
   const requestedSlides = requestedSlideCount(`${input.email.subject}\n${input.email.bodyText}`);
   const { metrics, error: metricsError } = sourceMetrics(sources);
