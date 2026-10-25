@@ -3,6 +3,7 @@ import type { ContentBlock, OrganizationProfile, SlideContent, WorkProduct } fro
 import type { Dashboard, Direction } from "../dashboard";
 import { EngineError } from "../errors";
 import { blockBoxes, blockParagraphs, bodyBox, bodySteps, COVER_TITLE, fitFont, headingH, heightFor, labelH, MIN_BODY_PT, needsBasisLabel, SLIDE, TITLE_STEPS, type BlockBox } from "../layout";
+import { usd } from "../calculations";
 import { officeText } from "../text";
 import { columnWidths } from "./docx";
 
@@ -176,25 +177,34 @@ function addTextWithVisual(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: Sli
   const font = organization.brand.fontFamily;
   const axis = { catAxisLabelFontSize: 12, catAxisLabelColor: BODY, valAxisLabelFontSize: 10, valAxisLabelColor: MUTED, valAxisMinVal: 0, valGridLine: { color: "E4E9EF", size: 0.5 }, showValue: true, dataLabelFontSize: 11, dataLabelColor: BODY, titleFontSize: 13, titleColor: BODY, titleFontFace: font, showTitle: true };
   if (visual === "channels") {
-    slide.addChart(pptx.ChartType.bar, dashboard.channels.map((channel) => ({ name: officeText(channel.name), labels: dashboard.months.map(officeText), values: channel.revenue })), {
-      x: SLIDE.x, y: top, w: SLIDE.w, h: bandH, barDir: "col", barGrouping: "clustered", chartColors: dashboard.channels.map((channel) => channel.color),
-      title: "Revenue per channel by month (USD)", showLegend: true, legendPos: "r", legendFontSize: 11, dataLabelFormatCode: "$#,##0", valAxisLabelFormatCode: "$#,##0", ...axis,
+    // Horizontal bars: one row per channel, last month in grey against this month in the brand color.
+    const channels = [...dashboard.channels].reverse();
+    slide.addChart(pptx.ChartType.bar, dashboard.months.map((month, index) => ({ name: officeText(month), labels: channels.map((channel) => officeText(channel.name)), values: channels.map((channel) => channel.revenue[index]!) })), {
+      x: SLIDE.x, y: top, w: SLIDE.w, h: bandH, barDir: "bar", barGrouping: "clustered", barGapWidthPct: 60, chartColors: ["BCCCDC", hex(organization.brand.primaryColor)],
+      title: `Revenue per channel, ${dashboard.months[0]} vs ${dashboard.months[1]} (USD)`, showLegend: true, legendPos: "b", legendFontSize: 11,
+      dataLabelFormatCode: dashboard.channels.some((channel) => channel.revenue.some((value) => !Number.isInteger(value))) ? "$#,##0.00" : "$#,##0", valAxisLabelFormatCode: "$#,##0", ...axis,
     });
     return true;
   }
-  const aov = dashboard.averageOrderValue;
-  const both = aov[0] !== null && aov[1] !== null;
-  const w = both ? (SLIDE.w - 0.4) / 2 : SLIDE.w;
-  slide.addChart(pptx.ChartType.bar, [{ name: "Orders", labels: dashboard.months.map(officeText), values: dashboard.orders }], {
-    x: SLIDE.x, y: top, w, h: bandH, barDir: "col", chartColors: [accent], title: "Orders per month", showLegend: false, dataLabelFormatCode: "#,##0", valAxisLabelFormatCode: "#,##0", ...axis,
+  // Orders as a filled trend; average order value as two big-number tiles with the change between them.
+  const w = (SLIDE.w - 0.4) * 0.58;
+  slide.addChart(pptx.ChartType.area, [{ name: "Orders", labels: dashboard.months.map(officeText), values: dashboard.orders }], {
+    x: SLIDE.x, y: top, w, h: bandH, chartColors: [accent], chartColorsOpacity: 55, title: "Orders per month", showLegend: false,
+    dataLabelFormatCode: "#,##0", valAxisLabelFormatCode: "#,##0", ...axis,
   });
-  if (both) {
-    const cents = aov.some((value) => !Number.isInteger(value));
-    slide.addChart(pptx.ChartType.bar, [{ name: "Average order value", labels: dashboard.months.map(officeText), values: aov as [number, number] }], {
-      x: SLIDE.x + w + 0.4, y: top, w, h: bandH, barDir: "col", chartColors: [hex(organization.brand.primaryColor)], title: "Average order value (USD)", showLegend: false,
-      dataLabelFormatCode: cents ? "$#,##0.00" : "$#,##0", valAxisLabelFormatCode: "$#,##0", ...axis,
-    });
-  }
+  const tileX = SLIDE.x + w + 0.4;
+  const tileW = (SLIDE.w - w - 0.4 - 0.25) / 2;
+  const aovKpi = dashboard.kpis.find((kpi) => kpi.label === "Average order value");
+  slide.addText("Average order value", { x: tileX, y: top, w: tileW * 2 + 0.25, h: 0.35, fontFace: font, fontSize: 13, color: BODY, margin: 0, align: "center" });
+  dashboard.averageOrderValue.forEach((value, index) => {
+    const x = tileX + index * (tileW + 0.25);
+    const y = top + 0.45;
+    const h = bandH - 1.0;
+    slide.addShape(pptx.ShapeType.roundRect, { x, y, w: tileW, h, rectRadius: 0.1, fill: { color: index === 1 ? "EEF4F8" : "FFFFFF" }, line: { color: CARD_LINE, width: 0.75 } });
+    slide.addText(officeText(dashboard.months[index]!), { x, y: y + 0.2, w: tileW, h: 0.35, fontFace: font, fontSize: 13, color: MUTED, margin: 0, align: "center" });
+    slide.addText(value === null ? "n/a" : usd(Math.round(value * 100)), { x, y: y + 0.6, w: tileW, h: h - 0.9, fontFace: font, fontSize: 30, bold: true, color: DARK, margin: 0, align: "center", valign: "middle" });
+  });
+  if (aovKpi) slide.addText(`${arrow(aovKpi.direction)}${officeText(aovKpi.change)}`, { x: tileX, y: top + bandH - 0.45, w: tileW * 2 + 0.25, h: 0.35, fontFace: font, fontSize: 13, bold: true, color: trendColor(aovKpi.direction), margin: 0, align: "center" });
   return true;
 }
 

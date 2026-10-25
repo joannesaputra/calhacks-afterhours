@@ -267,7 +267,8 @@ describe("calculations stay authoritative", () => {
     const text = JSON.stringify(result.products);
     expect(text).toContain("Revenue decreased 12.5%");
     expect(text).toContain("$12,000.50");
-    for (const stale of ["$15,000", "25%", "66.7%", "January", "grew"]) expect(text).not.toContain(stale);
+    // "25%" alone is a real value here (Partnerships' March share); the stale claims are the canonical growth statements.
+    for (const stale of ["$15,000", "increased 25%", "grew 25%", "66.7%", "January"]) expect(text).not.toContain(stale);
   }, 20_000);
 
   it("refuses to sum mixed currencies and treats blanks as unknown", () => {
