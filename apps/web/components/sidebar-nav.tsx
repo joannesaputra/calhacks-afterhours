@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Bell, Inbox, Settings } from "lucide-react";
 import { useNotificationList, useTaskList } from "@/lib/hooks";
-import { FILTERS, filterHref, isUrgentNotification, parseFilter } from "@/lib/labels";
+import { FILTERS, isUrgentNotification } from "@/lib/labels";
+import { QUEUE_LAYOUT } from "@/lib/queue";
 
 function Count({ n, tone }: { n: number | undefined; tone?: "bad" }) {
   if (n === undefined) return null;
@@ -29,25 +30,27 @@ function Items({ onNavigate }: { onNavigate: (e: MouseEvent<HTMLAnchorElement>) 
   );
 
   const onQueue = pathname === "/" || pathname.startsWith("/tasks");
-  const queueFilter = pathname === "/" ? parseFilter(params.get("filter")) : null;
+  const openBar = pathname === "/" ? params.get("open") : null;
   const onNotifications = pathname.startsWith("/notifications");
   const urgentOnly = onNotifications && params.get("filter") === "urgent";
 
   return (
     <ul>
       <li>
-        <Link href={filterHref("ready")} className="nav-link" aria-current={onQueue && queueFilter === null ? "page" : undefined} data-group-active={onQueue || undefined} onClick={onNavigate}>
+        <Link href="/" className="nav-link" aria-current={onQueue && !openBar ? "page" : undefined} data-group-active={onQueue || undefined} onClick={onNavigate}>
           <Inbox size={18} aria-hidden /><span>Work queue</span>
         </Link>
-        <ul className="subnav" aria-label="Work queue views">
-          {FILTERS.map((f) => (
-            <li key={f.id}>
-              <Link href={filterHref(f.id)} className="nav-sub" aria-current={queueFilter === f.id ? "page" : undefined} onClick={onNavigate}>
-                <span>{f.label}</span><Count n={counts?.[f.id]} />
-              </Link>
-            </li>
-          ))}
-        </ul>
+        {QUEUE_LAYOUT === "accordion" && (
+          <ul className="subnav" aria-label="Work queue sections">
+            {FILTERS.filter((f) => f.statuses).map((f) => (
+              <li key={f.id}>
+                <Link href={`/?open=${f.id}`} className="nav-sub" aria-current={openBar === f.id ? "page" : undefined} onClick={onNavigate}>
+                  <span>{f.label}</span><Count n={counts?.[f.id]} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </li>
       <li>
         <Link href="/notifications" className="nav-link" aria-current={onNotifications && !urgentOnly ? "page" : undefined} data-group-active={onNotifications || undefined} onClick={onNavigate}>

@@ -1,12 +1,14 @@
 "use client";
 import Link from "next/link";
-import { ArrowRight, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import type { TaskSummary } from "@afterhours/contracts";
 import { describeError } from "@/lib/api";
 import { formatElapsed, formatRelative } from "@/lib/format";
-import { OUTPUT_LABEL, STAGE_LABEL, isActive, isConfigError } from "@/lib/labels";
+import { STAGE_LABEL, isActive, isConfigError } from "@/lib/labels";
+import { senderLabel } from "@/lib/queue";
 import { useNow, useRetry, useTask } from "@/lib/hooks";
 import { IngestionBadge, StatusBadge } from "./badges";
+import { Avatar, SenderName } from "./sender";
 import { useShell } from "./shell";
 import { useToast } from "./providers";
 
@@ -62,19 +64,20 @@ export function TaskCard({ task, nowMs }: { task: TaskSummary; nowMs: number }) 
   const { workerHealthy } = useShell();
   return (
     <article className={`card task-card status-${task.status}`} aria-label={task.title}>
-      <div className="card-head">
-        <h2 className="card-title"><Link href={href}>{task.title}</Link></h2>
-        <div className="card-badges">
-          <StatusBadge status={task.status} workerHealthy={workerHealthy} />
-          <IngestionBadge mode={task.ingestionMode} />
+      <div className="card-row">
+        <Avatar name={senderLabel(task)} email={task.senderEmail} />
+        <div className="card-main">
+          <h2 className="card-title"><Link href={href} className="card-link">{task.title}</Link></h2>
+          <p className="card-meta"><SenderName task={task} /></p>
         </div>
-      </div>
-      <p className="card-meta">
-        <span className="muted" title="When the original email was sent (taken from the email itself)">Email sent {formatRelative(task.receivedAt, nowMs)}</span>
-      </p>
-      <div className="chips">
-        {task.requestedOutputs.map((o) => <span key={o} className="badge badge-neutral">{OUTPUT_LABEL[o]}</span>)}
-        {task.warningCount > 0 && <span className="badge badge-warn"><TriangleAlert size={14} aria-hidden />{task.warningCount} warning{task.warningCount === 1 ? "" : "s"}</span>}
+        <div className="card-side">
+          <span className="muted card-sent" title="When the original email was sent (taken from the email itself)">Email sent {formatRelative(task.receivedAt, nowMs)}</span>
+          <div className="card-badges">
+            <StatusBadge status={task.status} workerHealthy={workerHealthy} />
+            <IngestionBadge mode={task.ingestionMode} />
+            {task.warningCount > 0 && <span className="badge badge-warn"><TriangleAlert size={14} aria-hidden />{task.warningCount} warning{task.warningCount === 1 ? "" : "s"}</span>}
+          </div>
+        </div>
       </div>
 
       {isActive(task.status) && <ActiveProgress task={task} />}
@@ -85,14 +88,6 @@ export function TaskCard({ task, nowMs }: { task: TaskSummary; nowMs: number }) 
           <strong>{task.error?.code ?? "FAILED"}:</strong> {task.error?.message ?? "Preparation failed."}
         </p>
       )}
-
-      <div className="card-actions">
-        {task.status === "ready" && <Link href={href} className="btn btn-primary">Review work<ArrowRight size={16} aria-hidden /></Link>}
-        {task.status === "needs_input" && <Link href={href} className="btn btn-primary">Answer questions<ArrowRight size={16} aria-hidden /></Link>}
-        {(task.status === "approved" || task.status === "dismissed" || task.status === "skipped" || isActive(task.status)) && (
-          <Link href={href} className="link-inline">Open<ArrowRight size={14} aria-hidden /></Link>
-        )}
-      </div>
       {task.status === "failed" && <FailedActions task={task} />}
     </article>
   );
