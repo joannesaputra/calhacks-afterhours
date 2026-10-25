@@ -1,4 +1,5 @@
 "use client";
+import { BrandMark } from "@/components/brand";
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -48,6 +49,7 @@ export function LoginForm() {
   return (
     <form className="card login-card" onSubmit={submit} noValidate>
       <div className="brand">
+        <BrandMark />
         <span className="brand-name">AfterHours</span>
         <span className="brand-sub">Work ready for review</span>
       </div>

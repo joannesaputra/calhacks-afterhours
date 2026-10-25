@@ -9,6 +9,7 @@ import { api, describeError } from "@/lib/api";
 import { useIntegrations, useSession } from "@/lib/hooks";
 import { formatDateTime } from "@/lib/format";
 import { useGuard, useToast } from "./providers";
+import { BrandMark } from "./brand";
 import { ErrorPanel } from "./states";
 
 interface ShellState {
@@ -121,6 +122,7 @@ export function AppShell({ demoEnabled, children }: { demoEnabled: boolean; chil
       <div className="shell">
         <aside className="rail">
           <div className="brand">
+            <BrandMark />
             <span className="brand-name">{APP_NAME}</span>
             <span className="brand-sub">Work ready for review</span>
           </div>
