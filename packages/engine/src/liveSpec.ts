@@ -1,5 +1,11 @@
-import { WorkPlanSchema, WorkProductSchema } from "@afterhours/contracts";
+import { WorkPlanSchema as DomainPlanSchema, WorkProductSchema, WorkQuestionSchema } from "@afterhours/contracts";
 import { z } from "zod";
+
+/**
+ * The model never offers closed choices, so `options` (used by context clarifications only) is not part of what it is
+ * asked to produce. Every other field of the plan is unchanged.
+ */
+const WorkPlanSchema = DomainPlanSchema.extend({ questions: z.array(WorkQuestionSchema.omit({ options: true })) });
 
 /** The accepted live response. Runtime validation and the model-facing specification both come from this one schema. */
 export const LiveResponseSchema = z.discriminatedUnion("outcome", [

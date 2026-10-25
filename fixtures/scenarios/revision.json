@@ -1,0 +1,31 @@
+{
+  "scenario": "revision",
+  "email": {
+    "providerMessageId": "demo-revision-base",
+    "providerThreadId": "demo-thread-revision",
+    "from": {
+      "name": "Alex Morgan",
+      "email": "alex@maple-and-moss.example"
+    },
+    "to": [
+      "team@harbor-creative.example"
+    ],
+    "subject": "Please update the kickoff deck",
+    "receivedAt": "2026-10-26T16:00:00.000Z",
+    "bodyText": "Can you revise the attached presentation based on my notes?\nChange the fee from $50,000 to $45,000 on slide 2.\nOn slide 3 add the bullet \"Launch review on Friday\".\nMake the closing warmer.",
+    "attachments": [
+      {
+        "id": "att-kickoff-deck",
+        "filename": "kickoff-deck.pptx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "sizeBytes": 66775
+      }
+    ]
+  },
+  "attachmentFiles": [
+    {
+      "attachmentId": "att-kickoff-deck",
+      "relativePath": "attachments/kickoff-deck.pptx"
+    }
+  ]
+}

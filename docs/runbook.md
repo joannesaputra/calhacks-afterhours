@@ -212,6 +212,20 @@ A delivery adapter must therefore time out in well under 60 s. A provider timeou
 other errors retry only when marked `retryable` (3 attempts, 60 s × attempt backoff). Notification code never touches
 jobs or task status: generation is not rerun and ready work stays ready.
 
+## Email history and file context
+
+Settings → *Email history and files*. Everything is opt-in; with no grants nothing is read beyond the request itself.
+
+- **Email history:** needs Gmail connected. Choose a lookback (90 days suggested). The worker backfills in bounded pages and
+  then syncs incrementally; Settings shows how much was read and says when history is incomplete. Sync runs only while
+  *Automation* is on. Old messages are searchable context only; they never start tasks.
+- **Project files:** set `CONTEXT_FILES_ROOT` to a directory the app may read, restart the API, then share specific folders.
+  Google Drive is not available in this release.
+- **Stop sharing** revokes access at once. **Delete what was kept** removes retained copies (also done automatically after
+  `CONTEXT_RETENTION_DAYS`). Disconnecting Gmail revokes every history grant.
+- A task that asks to revise a presentation shows its evidence on the *Context used* tab and can be corrected there.
+- Details, limits and the exact test results: `docs/context-resolution.md`.
+
 ## Deployment (single host)
 
 ```bash

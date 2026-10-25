@@ -70,6 +70,19 @@ function copyReferenced(snapshot: Database.Database, srcArtifacts: string, dstAr
     copyFileSync(src, dst);
     out.push({ relPath: r.rel_path, sizeBytes: r.size_bytes, sha256: r.sha256 });
   }
+  // Retained source files (email attachments, shared-folder files). They can be fetched again from their source, so a
+  // blob that is already missing or altered is skipped rather than failing the backup.
+  const hasVersions = snapshot.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='file_versions'").get();
+  const blobs = hasVersions ? (snapshot.prepare("SELECT DISTINCT blob_rel_path p, checksum_sha256 s FROM file_versions WHERE blob_rel_path IS NOT NULL").all() as Array<{ p: string; s: string | null }>) : [];
+  for (const b of blobs) {
+    const src = resolveArtifactPath(srcArtifacts, b.p);
+    if (!src) continue;
+    const bytes = readFileSync(src);
+    if (b.s && sha256Bytes(bytes) !== b.s) continue;
+    const dst = path.join(dstArtifacts, b.p);
+    mkdirSync(path.dirname(dst), { recursive: true });
+    copyFileSync(src, dst);
+  }
   return out;
 }
 
@@ -112,6 +125,12 @@ export function verifyBackup(dir: string): VerifyResult {
       const bytes = readFileSync(p);
       if (bytes.byteLength !== r.size_bytes || sha256Bytes(bytes) !== r.sha256) problems.push(`artifact does not match manifest: ${r.rel_path}`);
       files.push({ relPath: r.rel_path, sizeBytes: r.size_bytes, sha256: r.sha256 });
+    }
+    // Retained source files that are present must match their checksum; absent ones are re-fetched on demand.
+    const hasVersions = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='file_versions'").get();
+    for (const b of hasVersions ? (db.prepare("SELECT DISTINCT blob_rel_path p, checksum_sha256 s FROM file_versions WHERE blob_rel_path IS NOT NULL").all() as Array<{ p: string; s: string | null }>) : []) {
+      const p = existsSync(artRoot) ? resolveArtifactPath(artRoot, b.p) : null;
+      if (p && b.s && sha256Bytes(readFileSync(p)) !== b.s) problems.push(`retained source file does not match its checksum: ${b.p}`);
     }
     const stuck = (db.prepare("SELECT COUNT(*) n FROM tasks t WHERE t.status IN ('ready','approved') AND NOT EXISTS (SELECT 1 FROM artifacts a WHERE a.task_id=t.id AND a.revision=t.revision)").get() as { n: number }).n;
     if (stuck) problems.push(`${stuck} ready/approved task(s) have no artifacts for their current revision`);

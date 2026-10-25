@@ -8,7 +8,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import type { SettingsPatch, TaskDetail, TaskSummary, WorkAnswer } from "@afterhours/contracts";
+import type { ContextCorrectionBody, CreateGrantBody, SettingsPatch, TaskDetail, TaskSummary, WorkAnswer } from "@afterhours/contracts";
 import { api } from "./api";
 import { isActive } from "./labels";
 
@@ -19,6 +19,8 @@ export const keys = {
   notifications: ["notifications"] as const,
   settings: ["settings"] as const,
   integrations: ["integrations"] as const,
+  context: ["context"] as const,
+  taskContext: (id: string) => ["task-context", id] as const,
 };
 
 const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
@@ -130,7 +132,7 @@ export function useRetry(id: string) {
 export function useInject() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { scenario: "proposal" | "report" | "ambiguous" | "no_action"; replayKey: string }) =>
+    mutationFn: (v: { scenario: "proposal" | "report" | "ambiguous" | "no_action" | "revision" | "revision_choice"; replayKey: string }) =>
       api.inject(v.scenario, v.replayKey),
     onSettled: () => void qc.invalidateQueries({ queryKey: keys.tasks }),
   });
@@ -165,4 +167,36 @@ export function useNow(enabled: boolean, everyMs = 1000): number {
     return () => clearInterval(t);
   }, [enabled, everyMs]);
   return now;
+}
+
+/** Context used for one task. Polls while the task is active so the phase label tracks the worker. */
+export function useTaskContext(id: string, active: boolean) {
+  return useQuery({
+    queryKey: keys.taskContext(id),
+    queryFn: ({ signal }) => api.taskContext(id, signal),
+    refetchInterval: () => (hidden() || !active ? false : 2000),
+    retry: false,
+  });
+}
+
+export function useContextCorrection(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ContextCorrectionBody) => api.correctContext(id, body),
+    onSettled: () => { refreshTask(qc, id); void qc.invalidateQueries({ queryKey: keys.taskContext(id) }); },
+  });
+}
+
+export function useContextStatus() {
+  return useQuery({ queryKey: keys.context, queryFn: ({ signal }) => api.context(signal), refetchInterval: () => (hidden() ? false : 10_000) });
+}
+
+export function useContextGrants() {
+  const qc = useQueryClient();
+  const done = () => void qc.invalidateQueries({ queryKey: keys.context });
+  return {
+    create: useMutation({ mutationFn: (b: CreateGrantBody) => api.createGrant(b), onSuccess: done }),
+    revoke: useMutation({ mutationFn: (id: string) => api.revokeGrant(id), onSuccess: done }),
+    purge: useMutation({ mutationFn: (id: string) => api.purgeGrant(id), onSuccess: done }),
+  };
 }

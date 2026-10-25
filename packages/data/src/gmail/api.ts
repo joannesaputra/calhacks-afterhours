@@ -21,6 +21,11 @@ export interface GmailApi {
   listInbox(query: string, pageToken: string | undefined, max: number): Promise<{ ids: string[]; nextPageToken: string | null }>;
   getMessage(id: string): Promise<GmailMessage>;
   getAttachment(messageId: string, attachmentId: string): Promise<Buffer>;
+  /**
+   * List mail in any folder (inbox and sent) for history sync. Optional so existing test doubles stay valid; a client
+   * without it simply cannot back up history, and the context layer reports that instead of pretending.
+   */
+  listMessages?(query: string, pageToken: string | undefined, max: number): Promise<{ ids: string[]; nextPageToken: string | null }>;
 }
 
 export class GmailConfigError extends Error {}
@@ -79,6 +84,10 @@ export function createGmailApi(client: OAuth2Client): GmailApi {
     },
     async listInbox(q, pageToken, max) {
       const r = await g.users.messages.list({ userId: "me", q, labelIds: ["INBOX"], pageToken, maxResults: max });
+      return { ids: (r.data.messages ?? []).map((m) => m.id!).filter(Boolean), nextPageToken: r.data.nextPageToken ?? null };
+    },
+    async listMessages(q, pageToken, max) {
+      const r = await g.users.messages.list({ userId: "me", q, pageToken, maxResults: max });
       return { ids: (r.data.messages ?? []).map((m) => m.id!).filter(Boolean), nextPageToken: r.data.nextPageToken ?? null };
     },
     async getMessage(id) {

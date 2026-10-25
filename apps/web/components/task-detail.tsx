@@ -4,7 +4,8 @@ import { AlertTriangle, ArrowLeft, CalendarClock, FileText, Hourglass, MinusCirc
 import type { TaskDetail, TaskEvent } from "@afterhours/contracts";
 import { formatBytes, formatDateTime, formatElapsed, formatTime } from "@/lib/format";
 import { OUTPUT_LABEL, STAGE_LABEL, isActive } from "@/lib/labels";
-import { useNow, useSettings, useTask } from "@/lib/hooks";
+import { useNow, useSettings, useTask, useTaskContext } from "@/lib/hooks";
+import { ContextPhase, ContextUsed } from "./context-panel";
 import { ApiError } from "@/lib/api";
 import { GenerationBadge, IngestionBadge, StatusBadge } from "./badges";
 import { FileCard } from "./files";
@@ -149,7 +150,7 @@ function NotificationsTab({ detail, tz }: { detail: TaskDetail; tz?: string }) {
   );
 }
 
-function ActiveProgress({ detail, tz }: { detail: TaskDetail; tz?: string }) {
+function ActiveProgress({ detail, tz, phaseLabel }: { detail: TaskDetail; tz?: string; phaseLabel?: string | null }) {
   const { workerHealthy } = useShell();
   const now = useNow(workerHealthy);
   const latest = sortEvents(detail.events.filter((e) => e.revision === detail.task.revision)).at(-1);
@@ -157,7 +158,7 @@ function ActiveProgress({ detail, tz }: { detail: TaskDetail; tz?: string }) {
     <section className="panel" aria-labelledby="prog-h" aria-live="polite">
       <Hourglass size={22} aria-hidden />
       <div>
-        <h2 id="prog-h" className="h3">{workerHealthy ? "AfterHours is preparing this work" : "Waiting for the worker"}</h2>
+        <h2 id="prog-h" className="h3">{!workerHealthy ? "Waiting for the worker" : phaseLabel ?? "AfterHours is preparing this work"}</h2>
         {!workerHealthy && <p>The worker is not reporting a heartbeat, so this task will not progress until it starts.</p>}
         {latest && <p><strong>{STAGE_LABEL[latest.stage]}:</strong> {latest.message} <span className="muted small">({formatTime(latest.createdAt, tz)})</span></p>}
         <p className="muted small">{formatElapsed(detail.task.createdAt, now)} since the request arrived. Progress comes from the persisted activity log; no estimate is shown.</p>
@@ -168,6 +169,8 @@ function ActiveProgress({ detail, tz }: { detail: TaskDetail; tz?: string }) {
 
 export function TaskDetailView({ id }: { id: string }) {
   const q = useTask(id);
+  const ctxQuery = useTaskContext(id, !q.data || isActive(q.data.task.status));
+  const ctx = ctxQuery.data ?? null;
   const { workerHealthy } = useShell();
   const settings = useSettings();
   const tz = settings.data?.organization.timezone;
@@ -202,6 +205,7 @@ export function TaskDetailView({ id }: { id: string }) {
       </div>
       <div className="chips">
         <StatusBadge status={task.status} workerHealthy={workerHealthy} />
+        {ctx && ctx.phase !== "not_applicable" && <ContextPhase view={ctx} />}
         <IngestionBadge mode={task.ingestionMode} />
         <GenerationBadge mode={task.generationMode} />
       </div>
@@ -220,7 +224,8 @@ export function TaskDetailView({ id }: { id: string }) {
         </div>
       )}
 
-      {isActive(task.status) && <ActiveProgress detail={detail} tz={tz} />}
+      {isActive(task.status) && <ActiveProgress detail={detail} tz={tz} phaseLabel={ctx && ctx.phase !== "not_applicable" ? ctx.phaseLabel : null} />}
+      {ctx && ctx.phase === "error" && task.status === "failed" && <p className="muted small" role="note">{ctx.failureDetail}</p>}
       {task.status === "needs_input" && <NeedsInputPanel detail={detail} />}
       {task.status === "failed" && <FailedPanel detail={detail} />}
       {task.status === "skipped" && (
@@ -253,6 +258,7 @@ export function TaskDetailView({ id }: { id: string }) {
           label="Task details"
           items={[
             { id: "request", label: "Original request", content: <RequestTab detail={detail} tz={tz} /> },
+            ...(ctx && ctx.phase !== "not_applicable" ? [{ id: "context", label: "Context used", content: <ContextUsed detail={detail} view={ctx} tz={tz} /> }] : []),
             { id: "plan", label: "Plan", content: <PlanTab detail={detail} tz={tz} /> },
             { id: "sources", label: `Sources (${detail.sources.length})`, content: <SourcesTab detail={detail} /> },
             { id: "activity", label: `Activity (${detail.events.length})`, content: <ActivityTab detail={detail} tz={tz} /> },

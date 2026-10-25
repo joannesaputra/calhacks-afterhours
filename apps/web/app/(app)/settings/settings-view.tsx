@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, TriangleAlert, X } from "lucide-react";
 import { AutomationForm, NotificationsForm, OrganizationForm } from "@/components/settings/forms";
 import { GmailSection, ModelAndWorkerSection } from "@/components/settings/connections";
+import { ContextAccessSection } from "@/components/settings/context-access";
 import { useShell } from "@/components/shell";
 import { ErrorPanel, SkeletonCards } from "@/components/states";
 import { useSettings } from "@/lib/hooks";
@@ -62,6 +63,7 @@ export function SettingsView() {
         {settings.data && <OrganizationForm settings={settings.data} />}
         {settings.data && <AutomationForm settings={settings.data} />}
         <GmailSection status={integrations?.gmail} timeZone={tz} />
+        <ContextAccessSection timeZone={tz} />
         <ModelAndWorkerSection status={integrations} timeZone={tz} />
         {settings.data && (
           <NotificationsForm

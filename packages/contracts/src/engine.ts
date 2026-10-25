@@ -1,6 +1,7 @@
 // Cross-role engine/delivery schemas. Binary data (Uint8Array) is validated separately
 // from the JSON metadata so public DTOs never carry buffers.
 import { z } from "zod";
+import { ContextBundleSchema, ContextFileSchema, RevisionReportSchema } from "./context";
 import {
   ArtifactFormatSchema,
   EmailEnvelopeSchema,
@@ -13,7 +14,7 @@ import {
   WorkQuestionSchema,
 } from "./domain";
 
-export const FixtureScenarioSchema = z.enum(["proposal", "report", "ambiguous", "no_action"]);
+export const FixtureScenarioSchema = z.enum(["proposal", "report", "ambiguous", "no_action", "revision", "revision_choice"]);
 export type FixtureScenario = z.infer<typeof FixtureScenarioSchema>;
 
 export const Uint8ArraySchema = z.custom<Uint8Array>(
@@ -39,6 +40,10 @@ export const EngineInputSchema = z.object({
   answers: z.array(WorkAnswerSchema),
   now: z.string().datetime({ offset: true }),
   fixtureScenario: FixtureScenarioSchema.nullable(),
+  /** Resolved retrieval context (revision requests). Absent for ordinary requests. */
+  context: ContextBundleSchema.nullable().optional(),
+  /** Bytes of the resolved source file, keyed by `context.resolvedTarget.versionId`. */
+  contextFiles: z.array(ContextFileSchema).optional(),
 });
 export type EngineInput = z.infer<typeof EngineInputSchema>;
 
@@ -67,6 +72,8 @@ export const EngineResultMetaSchema = z.discriminatedUnion("outcome", [
     sources: z.array(SourceDocumentSchema),
     products: z.array(WorkProductSchema),
     warnings: z.array(z.string()),
+    /** Present when the files are a revision of a resolved source file. */
+    revisionReport: RevisionReportSchema.optional(),
   }),
   z.object({
     outcome: z.literal("needs_input"),

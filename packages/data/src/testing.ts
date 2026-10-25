@@ -106,3 +106,5 @@ export function runToReady(db: Db, config: AppConfig, key: string, now: Date): {
   });
   return { taskId, claimed };
 }
+
+export * from "./context/testing";

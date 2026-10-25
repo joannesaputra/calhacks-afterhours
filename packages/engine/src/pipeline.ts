@@ -13,6 +13,7 @@ import { renderDocx } from "./render/docx";
 import { renderPptx } from "./render/pptx";
 import { buildSources } from "./sources";
 import { extractProposalFacts } from "./proposalFacts";
+import { executeRevision } from "./revision";
 
 /** Internal injection points for tests; production uses the environment-configured provider. */
 export interface EngineOptions {
@@ -57,6 +58,9 @@ export async function execute(inputValue: EngineInput, deps: EngineDependencies,
   // Never report progress after cancellation or lost ownership.
   const emit = async (progress: EngineProgress) => { abortIfNeeded(signal); await deps.onProgress(progress); abortIfNeeded(signal); };
   abortIfNeeded(signal);
+  // A resolved revision request edits the supplied source deck in place. It needs no model, so it runs before the
+  // live-client check and never reports a missing provider key.
+  if (input.context) return executeRevision(input, deps);
   // Resolve the live client before any work so missing configuration fails fast and never falls back to fixtures.
   const client = input.mode === "live" ? (typeof options.modelClient === "function" ? options.modelClient() : options.modelClient ?? liveClientFromEnv()) : null;
   await emit({ stage: "extract", message: "Normalizing email, organization context, answers, and attachments." });

@@ -8,7 +8,7 @@ export const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3100";
 /** Second stack whose model is live but unconfigured, so every task fails with MODEL_NOT_CONFIGURED. */
 export const FAIL_BASE = process.env.E2E_FAIL_BASE_URL ?? "http://127.0.0.1:3101";
 
-export type Scenario = "proposal" | "report" | "ambiguous" | "no_action";
+export type Scenario = "proposal" | "report" | "ambiguous" | "no_action" | "revision" | "revision_choice";
 
 /** Inject through the real demo endpoint with the restricted CLI token (the same path as `pnpm demo:*`). */
 export async function inject(request: APIRequestContext, scenario: Scenario, replayKey?: string, base = BASE) {

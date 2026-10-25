@@ -658,3 +658,19 @@ Use current official docs and installed dependency types during implementation:
 
 These links support implementation research, not proof that your particular deployment has received provider approval. Confirm actual provider responses and account settings before stating a live integration works.
 
+
+
+## Appendix: additive contract changes for email-history and file context (Batch 8)
+
+All additions are optional or new; existing producers and consumers keep working. Source of truth is
+`packages/contracts/src/context.ts` and `docs/context-resolution.md`.
+
+- `WorkQuestion.options?: { id, label, detail }[]` closed choices; the answer is one option id. The model-facing live
+  schema omits it.
+- `EngineInput.context?: ContextBundle` and `EngineInput.contextFiles?: { versionId, filename, mimeType, bytes }[]`.
+- `EngineResult` (ready) `revisionReport?: RevisionReport` (per-requirement status, slide counts, base version checksum).
+- `FixtureScenario` adds `revision` and `revision_choice`.
+- API: `GET /v1/context`, `POST /v1/context/grants`, `DELETE /v1/context/grants/:id`, `POST /v1/context/grants/:id/purge`,
+  `GET /v1/context/folders`, `GET /v1/context/emails/:id`, `GET /v1/context/files/:versionId/download`,
+  `GET /v1/tasks/:id/context`, `POST /v1/tasks/:id/context/corrections`.
+- State machine: a context correction may move a `ready` task to `queued` as a new revision.

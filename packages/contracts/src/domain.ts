@@ -83,6 +83,8 @@ export const WorkQuestionSchema = z.object({
   question: z.string().min(1),
   reason: z.string(),
   required: z.boolean(),
+  /** Closed choices (for example candidate files). The answer is one option id. Absent for free-text questions. */
+  options: z.array(z.object({ id, label: z.string(), detail: z.string() })).optional(),
 });
 export type WorkQuestion = z.infer<typeof WorkQuestionSchema>;
 

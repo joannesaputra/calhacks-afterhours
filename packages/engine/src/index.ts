@@ -22,3 +22,6 @@ export async function runWork(input: EngineInput, deps: EngineDependencies): Pro
 export function createEngine(options: EngineOptions): { runWork: typeof runWork } {
   return { runWork: (input, deps) => execute(input, deps, options) };
 }
+export { extractDocument, PARSER_VERSION, type ExtractInput, type ExtractOutcome, type ExtractedUnit } from "./ooxml/extract";
+export { applyDeckEdits, readDeckBytes, listSlides, type DeckEditInput, type DeckEditResult, type SlideText } from "./ooxml/deck";
+export { OoxmlError, readPackage } from "./ooxml/zip";

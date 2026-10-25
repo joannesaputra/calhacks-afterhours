@@ -1,5 +1,5 @@
 import type {
-  EngineProgress,
+  EngineProgress, RevisionReport,
   SourceDocument,
   WorkPlan,
   WorkProduct,
@@ -8,6 +8,8 @@ import type {
 import type { Db } from "./db";
 import { badRequest } from "./errors";
 import { createReadyNotification } from "./notifications";
+import { recordRevisionOutcome } from "./context/run";
+import { OWNER_ID } from "./context/types";
 import {
   LEASE_SECONDS, MAX_ATTEMPTS, RETRY_DELAY_SECONDS,
   LeaseLostError, addEvent, assertOwnedJob, setStatus, type JobRow, type TaskRow,
@@ -192,7 +194,7 @@ export interface StoredFile {
 }
 
 export type CommitInput = { taskId: string; revision: number; ownerToken: string; now: Date } & (
-  | { outcome: "ready"; plan: WorkPlan; sources: SourceDocument[]; products: WorkProduct[]; warnings: string[]; files: StoredFile[] }
+  | { outcome: "ready"; plan: WorkPlan; sources: SourceDocument[]; products: WorkProduct[]; warnings: string[]; files: StoredFile[]; revisionReport?: RevisionReport }
   | { outcome: "needs_input"; plan: WorkPlan; sources: SourceDocument[]; questions: WorkQuestion[]; warnings: string[] }
   | { outcome: "skipped"; reason: string; sources: SourceDocument[] }
 );
@@ -244,6 +246,7 @@ export function commitEngineResult(db: Db, input: CommitInput): void {
       for (const w of input.warnings) addEvent(db, taskId, revision, "warning", "verify", w, now);
       addEvent(db, taskId, revision, "status", "export",
         `Ready for review: ${input.files.length} file${input.files.length === 1 ? "" : "s"} generated.`, now);
+      if (input.revisionReport) recordRevisionOutcome(db, OWNER_ID, taskId, revision, input.revisionReport, now);
       createReadyNotification(db, taskId, revision, now);
     } else if (input.outcome === "needs_input") {
       setStatus(db, task, "needs_input", now);

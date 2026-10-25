@@ -52,6 +52,18 @@ const EnvSchema = z.object({
   TWILIO_WHATSAPP_FROM: optStr,
   TWILIO_WHATSAPP_TO: optStr,
   TWILIO_CONTENT_SID: optStr,
+  // Email history and file context (all optional; defaults are in packages/data/src/context/limits.ts).
+  CONTEXT_FILES_ROOT: optStr,
+  CONTEXT_SUGGESTED_LOOKBACK_DAYS: z.preprocess(blank, z.coerce.number().int().min(1).max(730).default(90)),
+  CONTEXT_RETENTION_DAYS: z.preprocess(blank, z.coerce.number().int().min(0).max(3650).default(30)),
+  CONTEXT_MAX_QUERIES: z.preprocess(blank, z.coerce.number().int().min(1).max(500).optional()),
+  CONTEXT_MAX_MESSAGES: z.preprocess(blank, z.coerce.number().int().min(1).max(2000).optional()),
+  CONTEXT_MAX_FILES: z.preprocess(blank, z.coerce.number().int().min(1).max(100).optional()),
+  CONTEXT_MAX_BYTES: z.preprocess(blank, z.coerce.number().int().min(1024).max(2_000_000_000).optional()),
+  CONTEXT_MAX_UNITS: z.preprocess(blank, z.coerce.number().int().min(1).max(5000).optional()),
+  CONTEXT_MAX_MS: z.preprocess(blank, z.coerce.number().int().min(500).max(600_000).optional()),
+  CONTEXT_MIN_TARGET_SCORE: z.preprocess(blank, z.coerce.number().min(0).max(200).optional()),
+  CONTEXT_MIN_MARGIN: z.preprocess(blank, z.coerce.number().min(0).max(100).optional()),
 });
 
 export interface AppConfig {
@@ -82,6 +94,15 @@ export interface AppConfig {
     from: string | null;
     to: string | null;
     contentSid: string | null;
+  };
+  context: {
+    /** Operator-chosen directory that file grants may select folders from. Null: no local folder source. */
+    filesRoot: string | null;
+    suggestedLookbackDays: number;
+    /** Days a revoked grant's retained data is kept before the worker purges it. 0 purges on the next maintenance run. */
+    retentionDays: number;
+    limits: Partial<{ maxQueries: number; maxMessages: number; maxFiles: number; maxBytes: number; maxUnits: number; maxMs: number }>;
+    thresholds: Partial<{ minTargetScore: number; minMargin: number }>;
   };
 }
 
@@ -137,6 +158,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, repoRoot: strin
       from: e.TWILIO_WHATSAPP_FROM ?? null,
       to: e.TWILIO_WHATSAPP_TO ?? null,
       contentSid: e.TWILIO_CONTENT_SID ?? null,
+    },
+    context: {
+      filesRoot: e.CONTEXT_FILES_ROOT ? abs(e.CONTEXT_FILES_ROOT) : null,
+      suggestedLookbackDays: e.CONTEXT_SUGGESTED_LOOKBACK_DAYS,
+      retentionDays: e.CONTEXT_RETENTION_DAYS,
+      limits: Object.fromEntries(Object.entries({ maxQueries: e.CONTEXT_MAX_QUERIES, maxMessages: e.CONTEXT_MAX_MESSAGES, maxFiles: e.CONTEXT_MAX_FILES, maxBytes: e.CONTEXT_MAX_BYTES, maxUnits: e.CONTEXT_MAX_UNITS, maxMs: e.CONTEXT_MAX_MS }).filter(([, v]) => v !== undefined)),
+      thresholds: Object.fromEntries(Object.entries({ minTargetScore: e.CONTEXT_MIN_TARGET_SCORE, minMargin: e.CONTEXT_MIN_MARGIN }).filter(([, v]) => v !== undefined)),
     },
   };
 }

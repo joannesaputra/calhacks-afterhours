@@ -7,6 +7,7 @@ import {
   PasswordGate, DomainError, lookupSession, type AppConfig, type Db,
 } from "@afterhours/data";
 import { registerArtifactRoutes } from "./routes/artifacts";
+import { registerContextRoutes } from "./routes/context";
 import { registerDemoRoutes } from "./routes/demo";
 import { registerIntegrationRoutes, type GmailOAuthPort } from "./routes/integrations";
 import { registerSessionRoutes } from "./routes/session";
@@ -116,6 +117,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerSessionRoutes(app, ctx);
   registerTaskRoutes(app, ctx);
   registerArtifactRoutes(app, ctx);
+  registerContextRoutes(app, ctx);
   registerSettingsRoutes(app, ctx);
   registerIntegrationRoutes(app, ctx, deps.gmailOAuth);
   registerDemoRoutes(app, ctx);

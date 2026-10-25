@@ -323,6 +323,7 @@ describe("migration 003 on an existing database", () => {
     const db = openDb(path.join(dir, "m.sqlite"));
     const files = readMigrations();
     migrate(db, new Date(), files.filter((f) => f.version <= 2));
+    const upTo3 = files.filter((f) => f.version <= 3);
     const t = "2026-10-24T00:00:00.000Z";
     db.prepare("INSERT INTO intake_messages (id, source_key, ingestion_mode, envelope_json, received_at, created_at) VALUES ('i1','s1','demo','{}',?,?),('i2','s2','demo','{}',?,?)").run(t, t, t, t);
     for (const [id, intake] of [["t1", "i1"], ["t2", "i2"]] as const) {
@@ -331,7 +332,7 @@ describe("migration 003 on an existing database", () => {
     }
     db.prepare(`INSERT INTO notifications (id, dedupe_key, channel, state, message, task_ids_json, task_revisions_json, scheduled_for, created_at, updated_at)
       VALUES ('n1','digest/2026-10-24/outbox','outbox','simulated','m','["t1","t2"]','[1,1]',?,?,?),('n2','t1/1/whatsapp','whatsapp','queued','m','["t1"]','[1]',?,?,?)`).run(t, t, t, t, t, t);
-    expect(migrate(db, new Date(), files)).toEqual(["003_batch5_durability.sql"]);
+    expect(migrate(db, new Date(), upTo3)).toEqual(["003_batch5_durability.sql"]);
     expect(db.prepare("SELECT notification_id, task_id, revision, channel, ordinal FROM notification_members ORDER BY notification_id, ordinal").all()).toEqual([
       { notification_id: "n1", task_id: "t1", revision: 1, channel: "outbox", ordinal: 0 },
       { notification_id: "n1", task_id: "t2", revision: 1, channel: "outbox", ordinal: 1 },

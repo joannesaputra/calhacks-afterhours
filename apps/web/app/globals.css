@@ -356,3 +356,8 @@ input:disabled, select:disabled { background: var(--hover); color: var(--ink-2);
   .chart-value { font-size: 19px; }
   .chart-unit { font-size: 17px; }
 }
+
+/* Context used and consent */
+.option { cursor: pointer; }
+.option:has(input:checked) { border-color: var(--accent, currentColor); }
+.btn-sm { padding: 4px 12px; font-size: 0.875rem; }

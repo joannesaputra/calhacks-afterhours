@@ -70,7 +70,7 @@ describe("model-facing output specification", () => {
   const shapeOf = (schema: unknown) => Object.keys((schema as z.ZodObject<z.ZodRawShape>).shape);
 
   it("carries every field of every nested contract schema, as required properties", () => {
-    for (const schema of [WorkPlanSchema, WorkProductSchema, ContentBlockSchema, SlideContentSchema, SourceRefSchema, WorkQuestionSchema]) {
+    for (const schema of [WorkPlanSchema, WorkProductSchema, ContentBlockSchema, SlideContentSchema, SourceRefSchema, WorkQuestionSchema.omit({ options: true })]) {
       const keys = shapeOf(schema);
       const match = objects(spec).find((node) => Object.keys(node.properties!).length === keys.length && keys.every((key) => key in node.properties!));
       expect(match, `no definition with exactly ${keys.join(",")}`).toBeDefined();

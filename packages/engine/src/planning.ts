@@ -11,7 +11,9 @@ const AMBIGUOUS_QUESTIONS: WorkQuestion[] = [
 export type Classification = "proposal" | "report" | "ambiguous" | "no_action" | "unsupported";
 
 export function classify(input: EngineInput): Classification {
-  if (input.fixtureScenario) return input.fixtureScenario;
+  // Revision scenarios are resolved before the engine runs (input.context). Reaching here without a context means the
+  // request could not be treated as a revision, which this classifier does not handle.
+  if (input.fixtureScenario) return input.fixtureScenario === "revision" || input.fixtureScenario === "revision_choice" ? "unsupported" : input.fixtureScenario;
   const text = `${input.email.subject}\n${input.email.bodyText}`.toLowerCase();
   if (/\b(no action|fyi only|newsletter)\b/.test(text)) return "no_action";
   const imperative = /\b(please|prepare|create|draft|make|need|request)\b/.test(text);

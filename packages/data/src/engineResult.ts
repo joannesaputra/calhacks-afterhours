@@ -50,3 +50,21 @@ export function validateEngineResult(raw: unknown, input: Pick<EngineInput, "tas
   void input;
   return r;
 }
+
+/**
+ * Extra checks for a revision result: the report must describe the exact source version that was selected, and it must
+ * account for every requested change. A result that does not is rejected, never silently marked ready.
+ */
+export function validateRevisionResult(result: EngineResult, input: Pick<EngineInput, "context">): void {
+  const bundle = input.context;
+  if (!bundle || result.outcome !== "ready") return;
+  const report = result.revisionReport;
+  if (!report) throw new EngineResultError("A revision request returned files without a revision report.");
+  if (report.baseSha256 !== bundle.resolvedTarget.sha256 || report.baseVersionId !== bundle.resolvedTarget.versionId) {
+    throw new EngineResultError("The revision report does not match the source version that was selected.");
+  }
+  const reported = new Set(report.edits.map((e) => e.requirementId));
+  for (const r of bundle.requirements) if (!reported.has(r.id)) throw new EngineResultError(`The revision report does not account for requirement "${r.id}".`);
+  if (!result.files.some((f) => f.format === "pptx" && f.filename === report.outputFilename)) throw new EngineResultError("The revision report names a file that was not produced.");
+  if (!report.edits.some((e) => e.status === "applied" || e.status === "already_satisfied")) throw new EngineResultError("A revision must apply at least one requested change.");
+}

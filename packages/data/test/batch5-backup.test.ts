@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSy
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createBackup, markReviewed, openDb, restoreBackup, verifyBackup } from "../src";
+import { createBackup, markReviewed, openDb, readMigrations, restoreBackup, verifyBackup } from "../src";
 import { makeTestDb, runToReady } from "../src/testing";
 
 const T = new Date("2026-10-24T20:00:00Z");
@@ -22,7 +22,7 @@ describe("consistent backup and restore into an isolated location", () => {
     expect(existsSync(config.databasePath + "-wal")).toBe(true); // live WAL file: a raw copy of the main file would be wrong
     const out = path.join(tmp(), "backup");
     const m = await createBackup(db, config.artifactsDir, out, T);
-    expect(m.summary).toMatchObject({ tasks: 2, artifacts: 4, notifications: 2, schemaVersion: 3 });
+    expect(m.summary).toMatchObject({ tasks: 2, artifacts: 4, notifications: 2, schemaVersion: Math.max(...readMigrations().map((m) => m.version)) });
     expect(m.files).toHaveLength(4);
     expect(verifyBackup(out).ok).toBe(true);
 

@@ -2,6 +2,12 @@
 import { z } from "zod";
 import {
   ApiErrorEnvelopeSchema,
+  ContextStatusSchema,
+  ContextViewSchema,
+  FolderOptionsSchema,
+  OpenedEmailSchema,
+  type ContextCorrectionBody,
+  type CreateGrantBody,
   DemoInjectResultSchema,
   IntegrationStatusSchema,
   NotificationRecordSchema,
@@ -118,13 +124,23 @@ export const api = {
   retry: (id: string, revision: number) =>
     request(`/tasks/${encodeURIComponent(id)}/retry`, TaskSummarySchema, { method: "POST", body: { revision } }),
 
+  context: (signal?: AbortSignal) => request("/context", ContextStatusSchema, { signal }),
+  taskContext: (id: string, signal?: AbortSignal) => request(`/tasks/${encodeURIComponent(id)}/context`, ContextViewSchema.nullable(), { signal }),
+  correctContext: (id: string, body: ContextCorrectionBody) =>
+    request(`/tasks/${encodeURIComponent(id)}/context/corrections`, TaskSummarySchema, { method: "POST", body }),
+  createGrant: (body: CreateGrantBody) => request("/context/grants", z.object({ id: z.string() }), { method: "POST", body }),
+  revokeGrant: (id: string) => request(`/context/grants/${encodeURIComponent(id)}`, z.object({ revoked: z.boolean() }), { method: "DELETE" }),
+  purgeGrant: (id: string) => request(`/context/grants/${encodeURIComponent(id)}/purge`, z.object({ emails: z.number(), files: z.number() }).passthrough(), { method: "POST", body: {} }),
+  folders: (parent: string, signal?: AbortSignal) => request(`/context/folders?parent=${encodeURIComponent(parent)}`, FolderOptionsSchema, { signal }),
+  openEmail: (id: string, signal?: AbortSignal) => request(`/context/emails/${encodeURIComponent(id)}`, OpenedEmailSchema, { signal }),
+
   notifications: (cursor: string | null, signal?: AbortSignal) =>
     request(`/notifications${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, NotificationListSchema, { signal }),
   settings: (signal?: AbortSignal) => request("/settings", WorkspaceSettingsSchema, { signal }),
   patchSettings: (patch: SettingsPatch) => request("/settings", WorkspaceSettingsSchema, { method: "PATCH", body: patch }),
   integrations: (signal?: AbortSignal) => request("/integrations", IntegrationStatusSchema, { signal }),
   disconnectGmail: () => request("/integrations/gmail", z.object({ disconnected: z.boolean() }), { method: "DELETE" }),
-  inject: (scenario: "proposal" | "report" | "ambiguous" | "no_action", replayKey: string) =>
+  inject: (scenario: "proposal" | "report" | "ambiguous" | "no_action" | "revision" | "revision_choice", replayKey: string) =>
     request("/demo/inject", DemoInjectResultSchema, { method: "POST", body: { scenario, replayKey } }),
 };
 

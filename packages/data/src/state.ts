@@ -14,11 +14,14 @@ const ALLOWED: Record<TaskStatus, readonly TaskStatus[]> = {
   dismissed: [],
 };
 
-export function canTransition(from: TaskStatus, to: TaskStatus, opts?: { recovery?: boolean }): boolean {
+export function canTransition(from: TaskStatus, to: TaskStatus, opts?: { recovery?: boolean; correction?: boolean }): boolean {
   if (opts?.recovery && (from === "planning" || from === "running") && to === "queued") return true;
+  // A context correction (different file, removed source, added feedback) re-runs a task that was already ready.
+  // Approved and dismissed tasks stay closed.
+  if (opts?.correction && from === "ready" && to === "queued") return true;
   return ALLOWED[from].includes(to);
 }
 
-export function assertTransition(from: TaskStatus, to: TaskStatus, opts?: { recovery?: boolean }): void {
+export function assertTransition(from: TaskStatus, to: TaskStatus, opts?: { recovery?: boolean; correction?: boolean }): void {
   if (!canTransition(from, to, opts)) throw invalidTransition(from, to);
 }

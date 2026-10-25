@@ -6,12 +6,14 @@ import { describeError } from "@/lib/api";
 import { useInject } from "@/lib/hooks";
 import { useToast } from "./providers";
 
-type Scenario = "proposal" | "report" | "ambiguous" | "no_action";
+type Scenario = "proposal" | "report" | "ambiguous" | "no_action" | "revision" | "revision_choice";
 const SCENARIOS: Array<{ id: Scenario; label: string; note: string }> = [
   { id: "proposal", label: "Proposal + kickoff deck", note: "Client brief with attachment" },
   { id: "report", label: "Sales CSV report + slides", note: "CSV attachment, calculated figures" },
   { id: "ambiguous", label: "Ambiguous request", note: "Asks you clarifying questions" },
   { id: "no_action", label: "Newsletter (no action)", note: "Should be skipped" },
+  { id: "revision", label: "Revise an attached deck", note: "Edits the attached .pptx in place" },
+  { id: "revision_choice", label: "Revise: which deck?", note: "Two decks attached; asks you to choose" },
 ];
 const LAST_KEY = "ah.lastDemo";
 

@@ -4,6 +4,10 @@ import {
   type EmailEnvelope, type WorkAnswer,
 } from "@afterhours/contracts";
 import {
+  ContextAccessError, ContextRetryableError, DEFAULT_LIMITS, OWNER_ID, ProviderRegistry, buildFileProviders, captureCurrentVersion, checkAccess, coverageOf,
+  createGmailMailProvider, findAccount, getGmailRow, markGenerationStarted, purgeRevokedPastRetention, reflectGmailIntegration, resolveContext, runSyncUntilIdle,
+  updateGmailTokens, validateRevisionResult, activeGrants, getGmailTokens,
+  type ContextDeps, type Extractor, type MailProvider, type ResolveOutcome,
   ArtifactValidationError, EngineResultError, LIMITS, LeaseLostError, MAX_ATTEMPTS, appendProgress,
   clientWithTokens, claimDueNotification, claimNextJob, cleanOrphanArtifacts, cleanStaging, commitEngineResult,
   completeNotification, createGmailApi, failNotification, getSettings, getTaskRow, jobStillOwned, markSubmitStarted,
@@ -27,6 +31,11 @@ export interface WorkerDeps {
   sendNotification: (input: DeliveryInput) => Promise<DeliveryResult>;
   makeGmailApi?: (tokens: GmailTokens, onTokens: (t: GmailTokens) => void) => GmailApi;
   log: Logger;
+  /**
+   * Email-history and file context. Absent: requests are processed exactly as before. The extractor is the engine's
+   * (this package never parses Office files itself). `providers` overrides the real mailbox and file sources in tests.
+   */
+  context?: { extract: Extractor; parserVersion: string; providers?: ProviderRegistry; mail?: (accountId: string) => MailProvider | null };
   /** Test hooks. */
   jobDeadlineMs?: number;
   heartbeatIntervalMs?: number;
@@ -146,6 +155,84 @@ export function createWorker(deps: WorkerDeps) {
     });
   }
 
+  // ---------- Email history and file context ----------
+  const mailFor = (accountId: string): (MailProvider) | null => {
+    if (deps.context?.mail) return deps.context.mail(accountId);
+    const account = findAccount(db, OWNER_ID, "gmail");
+    const row = getGmailRow(db);
+    if (!account || account.id !== accountId || !row?.connection_token) return null;
+    const tokens = getGmailTokens(db, config.tokenEncryptionKey);
+    if (!tokens) return null;
+    const conn = row.connection_token;
+    return createGmailMailProvider(makeGmailApi(tokens, (t) => { updateGmailTokens(db, config.tokenEncryptionKey, t, now(), conn); }), account.account_ref);
+  };
+
+  function contextDeps(): ContextDeps | null {
+    if (!deps.context) return null;
+    return {
+      artifactsDir: config.artifactsDir, extract: deps.context.extract, parserVersion: deps.context.parserVersion,
+      providers: deps.context.providers ?? new ProviderRegistry(buildFileProviders(config), mailFor),
+      limits: config.context.limits, thresholds: config.context.thresholds,
+    };
+  }
+
+  /**
+   * Resolve the presentation and the requested edits before the engine runs. Requests that are not revisions pass
+   * through untouched. A revision that cannot be resolved ends as a clarification, with the candidates stored, without
+   * calling the engine.
+   */
+  async function prepareContext(
+    claimed: ClaimedJob, input: EngineInput, ref: { taskId: string; revision: number; ownerToken: string }, signal: AbortSignal,
+  ): Promise<{ input: EngineInput; early?: EngineResult }> {
+    const cd = contextDeps();
+    if (!cd) return { input };
+    const task = getTaskRow(db, claimed.taskId);
+    const outcome: ResolveOutcome = await resolveContext(cd, {
+      db, taskId: task.id, revision: task.revision, now: now(), envelope: input.email, attachments: input.attachments,
+      timezone: input.organization.timezone, answers: input.answers, useAccount: task.ingestion_mode === "gmail", signal,
+    });
+    if (outcome.kind === "not_applicable") return { input };
+    if (outcome.kind === "needs_input") {
+      appendProgress(db, ref, { stage: "plan", message: outcome.questions[0]!.question.slice(0, 300), plan: outcome.plan }, now());
+      log("info", "context.needs_input", { taskId: task.id, revision: task.revision, failure: outcome.failure });
+      return { input, early: { outcome: "needs_input", plan: outcome.plan, sources: outcome.sources, questions: outcome.questions, warnings: outcome.warnings } };
+    }
+    appendProgress(db, ref, { stage: "extract", message: `Found ${outcome.bundle.resolvedTarget.filename} and ${outcome.bundle.requirements.length} requested change${outcome.bundle.requirements.length === 1 ? "" : "s"} in the authorized sources.` }, now());
+    // access and version are rechecked immediately before generation
+    const access = await checkAccess(db, cd, OWNER_ID, task.id, task.revision, now());
+    if (!access.ok) {
+      if (access.reason === "provider_temporary") throw new ContextRetryableError(access.detail);
+      throw new ContextAccessError("CONTEXT_ACCESS_REVOKED", `${access.detail} Nothing was prepared. Review your sharing settings, then retry.`);
+    }
+    let bundle = outcome.bundle;
+    let files = outcome.files;
+    if (access.changed) {
+      const cap = await captureCurrentVersion(db, cd, OWNER_ID, task.id, task.revision, now());
+      if (cap) {
+        bundle = cap.bundle; files = cap.files;
+        appendProgress(db, ref, { stage: "extract", message: `The source file changed after it was selected. Using the version that exists now (${cap.newVersionKey.slice(0, 12)}); the earlier version (${cap.previousVersionKey.slice(0, 12)}) stays on record.` }, now());
+      }
+    }
+    markGenerationStarted(db, task.id, task.revision, now());
+    return { input: { ...input, context: bundle, contextFiles: files } };
+  }
+
+  /** Read-only history sync under the user's grant. Never creates a task; honours the same automation switch as the inbox poll. */
+  async function syncContext(): Promise<void> {
+    if (!deps.context) return;
+    reflectGmailIntegration(db, OWNER_ID, now());
+    if (!getSettings(db).automationEnabled) return;
+    const account = findAccount(db, OWNER_ID, "gmail");
+    if (!account || account.state === "disconnected" || !activeGrants(db, OWNER_ID, account.id, "email", now()).length) return;
+    const provider = mailFor(account.id);
+    if (!provider) return;
+    const results = await runSyncUntilIdle({ db, ownerId: OWNER_ID, accountId: account.id, provider, now, limits: { ...DEFAULT_LIMITS, ...config.context.limits }, workerId }, 3);
+    const stored = results.reduce((n, r) => n + r.stored, 0);
+    if (stored) log("info", "context.sync", { stored, coverageComplete: coverageOf(db, OWNER_ID, account.id, now()).complete });
+    const failed = results.find((r) => r.error);
+    if (failed) log("warn", "context.sync_error", { scope: failed.scope, paused: failed.paused });
+  }
+
   async function executeJob(claimed: ClaimedJob): Promise<void> {
     const ref = { taskId: claimed.taskId, revision: claimed.revision, ownerToken: claimed.ownerToken };
     const started = Date.now();
@@ -159,9 +246,11 @@ export function createWorker(deps: WorkerDeps) {
     current = { promise: Promise.resolve(), abort: (r) => abort(r as "shutdown") };
     log("info", "job.start", { taskId: claimed.taskId, revision: claimed.revision, attempt: claimed.attempts });
     try {
-      const input = await buildInput(claimed);
+      const built = await buildInput(claimed);
+      const prepared = await raceAbort(prepareContext(claimed, built, ref, controller.signal), controller.signal);
+      const input = prepared.input;
       const result = validateEngineResult(
-        await raceAbort(deps.runWork(input, {
+        prepared.early ?? await raceAbort(deps.runWork(input, {
           signal: controller.signal,
           onProgress: async (p) => {
             if (!appendProgress(db, ref, p, now())) { abort("lease_lost"); throw new LeaseLostError(); }
@@ -169,7 +258,16 @@ export function createWorker(deps: WorkerDeps) {
         }), controller.signal),
         input,
       );
+      validateRevisionResult(result, input);
       if (abortReason === "lease_lost") throw new LeaseLostError();
+      if (result.outcome === "ready" && input.context) {
+        // Recheck access before anything is staged or committed: a task must not complete on revoked source access.
+        const again = await checkAccess(db, contextDeps()!, OWNER_ID, claimed.taskId, claimed.revision, now());
+        if (!again.ok) {
+          if (again.reason === "provider_temporary") throw new ContextRetryableError(again.detail);
+          throw new ContextAccessError("CONTEXT_ACCESS_REVOKED", `${again.detail} Nothing was published. Review your sharing settings, then retry.`);
+        }
+      }
       if (result.outcome === "ready") {
         // Fenced publication: stage privately, re-check ownership, promote to immutable content-qualified paths
         // (never overwriting), re-verify bytes against the manifest, and only then commit the manifest.
@@ -181,7 +279,7 @@ export function createWorker(deps: WorkerDeps) {
           await hooks.afterPromote?.();
           verifyStoredFiles(config.artifactsDir, stored);
           commitEngineResult(db, { ...ref, now: now(), outcome: "ready", plan: result.plan, sources: result.sources,
-            products: result.products, warnings: result.warnings, files: stored });
+            products: result.products, warnings: result.warnings, files: stored, revisionReport: result.revisionReport });
         } finally {
           rmSync(staged.stagingDir, { recursive: true, force: true });
         }
@@ -352,11 +450,16 @@ export function createWorker(deps: WorkerDeps) {
       while (await processNextNotification()) { /* drain */ }
     });
     loop("inbox", config.gmailPollIntervalSeconds * 1000, pollInbox);
+    if (deps.context) loop("context-sync", Math.max(30, config.gmailPollIntervalSeconds * 2) * 1000, syncContext);
     // Conservative orphan cleanup (see cleanOrphanArtifacts): old, unreferenced, not in flight.
     loop("maintenance", 6 * 3600_000, async () => {
       const r = cleanOrphanArtifacts(db, config.artifactsDir, now().getTime());
       cleanStaging(config.artifactsDir, now().getTime());
       if (r.removed) log("info", "artifacts.orphans_removed", { removed: r.removed });
+      if (deps.context) {
+        const purged = purgeRevokedPastRetention(db, config.artifactsDir, OWNER_ID, config.context.retentionDays, now());
+        if (purged) log("info", "context.purged", { grants: purged });
+      }
     });
   }
 
@@ -376,5 +479,5 @@ export function createWorker(deps: WorkerDeps) {
     log("info", "worker.stopped", { workerId });
   }
 
-  return { start, stop, processNextJob, processNextNotification, pollInbox, executeJob };
+  return { start, stop, processNextJob, processNextNotification, pollInbox, executeJob, syncContext };
 }

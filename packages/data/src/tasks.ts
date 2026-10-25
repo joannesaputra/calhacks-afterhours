@@ -60,7 +60,7 @@ export function setStatus(
   task: Pick<TaskRow, "id" | "status">,
   to: TaskStatus,
   now: Date,
-  opts?: { recovery?: boolean },
+  opts?: { recovery?: boolean; correction?: boolean },
 ): void {
   assertTransition(task.status, to, opts);
   db.prepare("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ? AND status = ?").run(

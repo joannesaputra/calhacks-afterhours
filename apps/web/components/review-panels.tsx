@@ -214,14 +214,25 @@ export function NeedsInputPanel({ detail }: { detail: TaskDetail }) {
           const err = fieldErrors[q.id];
           return (
             <div className="field" key={q.id}>
-              <label htmlFor={`q-${q.id}`}>{q.question} {q.required ? <span className="req">Required</span> : <span className="muted small">Optional</span>}</label>
+              <label id={`q-${q.id}-l`} htmlFor={q.options?.length ? undefined : `q-${q.id}`}>{q.question} {q.required ? <span className="req">Required</span> : <span className="muted small">Optional</span>}</label>
               <p className="muted small" id={`why-${q.id}`}>Why we ask: {q.reason}</p>
-              <textarea
-                id={`q-${q.id}`} rows={3} maxLength={MAX_ANSWER + 200} value={valueOf(q.id)}
-                onChange={(e) => setEdits((v) => ({ ...v, [q.id]: e.target.value }))}
-                aria-invalid={err ? true : undefined}
-                aria-describedby={`why-${q.id}${err ? ` err-${q.id}` : ""}`}
-              />
+              {q.options && q.options.length > 0 ? (
+                <div role="radiogroup" aria-labelledby={`q-${q.id}-l`} aria-describedby={`why-${q.id}${err ? ` err-${q.id}` : ""}`} className="stack-sm">
+                  {q.options.map((o) => (
+                    <label key={o.id} className="card card-flat option" htmlFor={`q-${q.id}-${o.id}`}>
+                      <span><input type="radio" id={`q-${q.id}-${o.id}`} name={`q-${q.id}`} value={o.id} checked={valueOf(q.id) === o.id} onChange={() => setEdits((v) => ({ ...v, [q.id]: o.id }))} /> <strong className="wrap-anywhere">{o.label}</strong></span>
+                      <span className="muted small wrap-anywhere">{o.detail}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <textarea
+                  id={`q-${q.id}`} rows={3} maxLength={MAX_ANSWER + 200} value={valueOf(q.id)}
+                  onChange={(e) => setEdits((v) => ({ ...v, [q.id]: e.target.value }))}
+                  aria-invalid={err ? true : undefined}
+                  aria-describedby={`why-${q.id}${err ? ` err-${q.id}` : ""}`}
+                />
+              )}
               {err && <p id={`err-${q.id}`} className="field-error" role="alert">{err}</p>}
             </div>
           );

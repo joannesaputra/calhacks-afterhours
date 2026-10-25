@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import {
   GmailConfigError, authUrl, buildOAuthClient, clientWithTokens, consumeOauthState, createGmailApi, createOauthState,
   disconnectGmail, exchangeCode, getGmailTokens, getIntegrationStatus, lookupSession, oauthRedirectProblem,
-  saveGmailConnection, DomainError, GMAIL_SCOPES, type GmailTokens,
+  saveGmailConnection, DomainError, GMAIL_SCOPES, reflectGmailIntegration, OWNER_ID, type GmailTokens,
 } from "@afterhours/data";
 import type { Ctx } from "../app";
 
@@ -86,6 +86,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, ctx: Ctx, inject
       }
       const email = await port.profileEmail(tokens);
       saveGmailConnection(ctx.db, ctx.config.tokenEncryptionKey, { account: email, tokens }, ctx.now());
+      reflectGmailIntegration(ctx.db, OWNER_ID, ctx.now());
       return reply.redirect(back("connected"));
     } catch (e) {
       req.log.warn({ errName: e instanceof Error ? e.name : "unknown" }, "gmail oauth exchange failed");
@@ -98,6 +99,8 @@ export function registerIntegrationRoutes(app: FastifyInstance, ctx: Ctx, inject
     try { tokens = getGmailTokens(ctx.db, ctx.config.tokenEncryptionKey); } catch { /* unreadable: just drop */ }
     // Delete locally first so polling stops at once and a late refresh cannot write back; then revoke the copy.
     disconnectGmail(ctx.db, ctx.now());
+    // Every history and file grant tied to the mailbox is revoked with it; retained copies stay until purged.
+    reflectGmailIntegration(ctx.db, OWNER_ID, ctx.now());
     if (tokens) { try { await port.revoke(tokens); } catch { /* best effort */ } }
     return { data: { disconnected: true } };
   });

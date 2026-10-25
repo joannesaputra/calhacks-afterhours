@@ -1,0 +1,41 @@
+{
+  "scenario": "revision_choice",
+  "email": {
+    "providerMessageId": "demo-revision_choice-base",
+    "providerThreadId": "demo-thread-revision_choice",
+    "from": {
+      "name": "Alex Morgan",
+      "email": "alex@maple-and-moss.example"
+    },
+    "to": [
+      "team@harbor-creative.example"
+    ],
+    "subject": "Updates to the deck",
+    "receivedAt": "2026-10-26T16:00:00.000Z",
+    "bodyText": "Can you revise the presentation I sent? Change the fee from $50,000 to $45,000 on slide 2.",
+    "attachments": [
+      {
+        "id": "att-proposal-deck",
+        "filename": "proposal-deck.pptx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "sizeBytes": 60431
+      },
+      {
+        "id": "att-results-deck",
+        "filename": "results-deck.pptx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "sizeBytes": 60149
+      }
+    ]
+  },
+  "attachmentFiles": [
+    {
+      "attachmentId": "att-proposal-deck",
+      "relativePath": "attachments/proposal-deck.pptx"
+    },
+    {
+      "attachmentId": "att-results-deck",
+      "relativePath": "attachments/results-deck.pptx"
+    }
+  ]
+}
