@@ -118,7 +118,7 @@ ul, ol { padding-left: 1.25rem; }
 .card-note { background: var(--surface-2); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 0.9rem; }
 .card-note-bad { background: var(--bad-bg); color: var(--bad-ink); }
 .card-actions, .actions { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; margin-top: 4px; }
-.task-card.status-ready { border-color: var(--border-strong); border-left: 4px solid var(--accent-soft); }
+.task-card.status-ready { border-color: var(--border-strong); border-left: 4px solid #ffffff; }
 .task-card.status-failed { border-left: 4px solid var(--bad-ink); }
 .task-card.status-needs_input { border-left: 4px solid var(--warn-ink); }
 
