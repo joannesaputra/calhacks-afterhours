@@ -1,5 +1,7 @@
 # Batch 7 — Darren
 
+> **Superseded in part.** These answers describe the first integration candidate `ae422e6`. The final candidate is `09f54cc`; its answers (browser suite 25 passed / 1 skipped, UI reconciliation, Claude provider, fresh-clone checks, QA 53/53) are in `docs/batches/batch-7/integration.md`.
+
 Owned: root/config/lockfile/contracts/data/API/worker/runtime/merges. Evidence, hashes and commands are in `docs/batches/batch-7/integration.md`. Status words: PASS, FAIL, BLOCKED, NOT RUN. Fixture mode, demo ingestion and the outbox were used throughout; nothing live was called.
 
 ## Role questions
