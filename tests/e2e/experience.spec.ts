@@ -291,9 +291,9 @@ test("11. ingestion time and original email time are labeled separately and are 
   await expect(page.locator(".details-tabs").getByRole("tabpanel").getByText("Email sent", { exact: true })).toBeVisible();
   await expect(page.locator(".details-tabs").getByRole("tabpanel").getByText("Entered the system", { exact: true })).toBeVisible();
 
-  // The queue groups cards under a "From <sender>" heading; each card says when the email was sent.
+  // Each queue card names the sender (address on hover) and says when the email was sent.
   await page.goto("/");
-  await expect(page.locator(".sender-head").first()).toContainText(/^From .+<.+@.+>/);
+  await expect(page.getByRole("article").first()).toContainText(/From .+/);
   await expect(page.getByRole("article").first()).toContainText(/Email sent /);
 });
 

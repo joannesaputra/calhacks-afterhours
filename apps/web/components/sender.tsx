@@ -2,7 +2,7 @@ import { useId } from "react";
 import type { TaskSummary } from "@afterhours/contracts";
 import { senderLabel } from "@/lib/queue";
 
-const TINTS = ["#E8E3F4", "#E1EEE7", "#F6E7DD", "#E0EAF6", "#F4E1E6", "#EFEBD6"];
+const TINTS = ["#3B3560", "#27493A", "#5A3A2A", "#27405E", "#5A2D3C", "#4D4727"];
 function initials(name: string): string {
   const parts = name.replace(/<.*>/, "").trim().split(/[\s@._-]+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "?") + (parts.length > 1 ? parts[parts.length - 1]![0]! : "")).toUpperCase();

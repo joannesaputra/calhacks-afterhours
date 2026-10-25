@@ -1,9 +1,6 @@
 import type { TaskSummary } from "@afterhours/contracts";
 import { sortForQueue } from "./labels";
 
-/** Which queue design is built. Chosen at build/start time: `accordion` (default) or `bubbles`. */
-export const QUEUE_LAYOUT: "accordion" | "bubbles" = process.env.NEXT_PUBLIC_QUEUE_LAYOUT === "bubbles" ? "bubbles" : "accordion";
-
 export type SortKey = "recent" | "oldest" | "urgent" | "sender";
 export const SORTS: Array<{ id: SortKey; label: string }> = [
   { id: "recent", label: "Most recent" },

@@ -1,16 +1,16 @@
 "use client";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown } from "lucide-react";
 import type { TaskSummary } from "@afterhours/contracts";
 import { useShell } from "@/components/shell";
 import { DemoMenu } from "@/components/demo-menu";
 import { TaskCard } from "@/components/task-card";
+import { Avatar } from "@/components/sender";
 import { EmptyPanel, ErrorPanel, SkeletonCards } from "@/components/states";
 import { useNow, useTaskList } from "@/lib/hooks";
 import { FILTERS, filterHref, parseFilter, sortForQueue, type QueueFilter } from "@/lib/labels";
-import { QUEUE_LAYOUT, SORTS, parseSort, senderLabel, sortTasks, sourceLabel } from "@/lib/queue";
+import { SORTS, parseSort, senderLabel, sortTasks, sourceLabel } from "@/lib/queue";
 
 const STATUS_VIEWS = FILTERS.filter((f) => f.statuses);
 const inView = (t: TaskSummary, f: (typeof FILTERS)[number]) => !f.statuses || f.statuses.includes(t.status);
@@ -27,51 +27,8 @@ function Intro({ readyCount, loaded }: { readyCount: number; loaded: boolean }) 
   );
 }
 
-/** Version A: one drop-down bar per status; the sidebar links open a bar. */
-function Accordion({ items, now, loaded }: { items: TaskSummary[]; now: number; loaded: boolean }) {
-  const open = useSearchParams().get("open");
-  const [expanded, setExpanded] = useState<Set<QueueFilter>>(new Set(["ready"]));
-  useEffect(() => {
-    const target = STATUS_VIEWS.find((f) => f.id === open);
-    if (!target) return;
-    setExpanded((prev) => new Set(prev).add(target.id));
-    document.getElementById(`queue-${target.id}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [open]);
-  const toggle = (id: QueueFilter) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-
-  return (
-    <div className="bars">
-      {STATUS_VIEWS.map((f) => {
-        const tasks = sortTasks(items.filter((t) => inView(t, f)), "recent");
-        const isOpen = expanded.has(f.id);
-        return (
-          <section key={f.id} id={`queue-${f.id}`} className="bar">
-            <h2 className="bar-head">
-              <button type="button" className="bar-toggle" aria-expanded={isOpen} aria-controls={`bar-${f.id}`} onClick={() => toggle(f.id)}>
-                <span>{f.label}</span>
-                {loaded && <span className="count">{tasks.length}</span>}
-                <ChevronDown size={18} aria-hidden className="bar-chevron" />
-              </button>
-            </h2>
-            {isOpen && (
-              <div id={`bar-${f.id}`} className="bar-body stack">
-                {tasks.length === 0 ? <p className="muted bar-empty">Nothing here.</p> : tasks.map((t) => <TaskCard key={t.id} task={t} nowMs={now} />)}
-              </div>
-            )}
-          </section>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Version B: status bubbles that open each page, plus a filter bar (sort, sender, source). */
-function Bubbles({ items, now, loaded, filter }: { items: TaskSummary[]; now: number; loaded: boolean; filter: QueueFilter }) {
+/** Sender strip, sort and platform filters, then the cards. The status views live in the sidebar (chips on phones). */
+function QueueView({ items, now, loaded, filter }: { items: TaskSummary[]; now: number; loaded: boolean; filter: QueueFilter }) {
   const router = useRouter();
   const params = useSearchParams();
   const sort = parseSort(params.get("sort"));
@@ -81,29 +38,26 @@ function Bubbles({ items, now, loaded, filter }: { items: TaskSummary[]; now: nu
 
   const inStatus = useMemo(() => items.filter((t) => inView(t, active)), [items, active]);
   const senders = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const t of items) m.set(t.senderEmail.toLowerCase(), senderLabel(t));
-    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [items]);
+    const m = new Map<string, { email: string; label: string; n: number }>();
+    for (const t of inStatus) {
+      const k = t.senderEmail.toLowerCase();
+      const g = m.get(k) ?? { email: k, label: senderLabel(t), n: 0 };
+      g.n += 1;
+      m.set(k, g);
+    }
+    return [...m.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [inStatus]);
   const sources = useMemo(() => [...new Set(items.map((t) => t.ingestionMode))], [items]);
   const shown = useMemo(
     () => sortTasks(inStatus.filter((t) => (!from || t.senderEmail.toLowerCase() === from) && (!source || t.ingestionMode === source)), sort),
     [inStatus, from, source, sort],
   );
-  const counts = (f: (typeof FILTERS)[number]) => items.filter((t) => inView(t, f)).length;
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params.toString());
     if (value) next.set(key, value); else next.delete(key);
     const q = next.toString();
     router.replace(q ? `/?${q}` : "/");
-  };
-  const keep = (id: QueueFilter) => {
-    const base = filterHref(id);
-    const extras = new URLSearchParams();
-    for (const k of ["sort", "from", "source"]) if (params.get(k)) extras.set(k, params.get(k)!);
-    const e = extras.toString();
-    return e ? `${base}${base.includes("?") ? "&" : "?"}${e}` : base;
   };
 
   const groups = useMemo(() => {
@@ -120,24 +74,34 @@ function Bubbles({ items, now, loaded, filter }: { items: TaskSummary[]; now: nu
 
   return (
     <>
-      <nav className="bubbles" aria-label="Work queue pages">
+      <div className="filters" role="group" aria-label="Queue views">
         {FILTERS.map((f) => (
-          <Link key={f.id} href={keep(f.id)} className="bubble" aria-current={filter === f.id ? "page" : undefined}>
-            {f.label}{loaded && <span className="count">{counts(f)}</span>}
-          </Link>
+          <button key={f.id} type="button" className="filter" aria-pressed={filter === f.id} onClick={() => router.replace(filterHref(f.id))}>
+            {f.label}{loaded ? <span className="count">{items.filter((t) => inView(t, f)).length}</span> : null}
+          </button>
         ))}
-      </nav>
+      </div>
+
+      {senders.length > 0 && (
+        <div className="senders" role="group" aria-label="Filter by sender">
+          <button type="button" className="sender-pick" aria-pressed={from === ""} onClick={() => setParam("from", "")}>
+            <span className="sender-all" aria-hidden>All</span>
+            <span className="sender-label">Everyone</span>
+          </button>
+          {senders.map((s) => (
+            <button key={s.email} type="button" className="sender-pick" aria-pressed={from === s.email} title={s.email} onClick={() => setParam("from", from === s.email ? "" : s.email)}>
+              <Avatar name={s.label} email={s.email} />
+              <span className="sender-label">{s.label}</span>
+              <span className="sender-n">{s.n}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="filterbar" role="group" aria-label="Sort and filter">
         <label>Sort
           <select value={sort} onChange={(e) => setParam("sort", e.target.value === "recent" ? "" : e.target.value)}>
-            {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-        </label>
-        <label>Sent from
-          <select value={from} onChange={(e) => setParam("from", e.target.value)}>
-            <option value="">Everyone</option>
-            {senders.map(([email, label]) => <option key={email} value={email}>{label}</option>)}
+            {SORTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
         </label>
         <label>Platform
@@ -152,7 +116,7 @@ function Bubbles({ items, now, loaded, filter }: { items: TaskSummary[]; now: nu
       </div>
 
       {loaded && shown.length === 0 && (
-        <EmptyPanel title={`Nothing in “${active.label}”`}><p>{from || source ? "No work matches these filters." : "Try another page."}</p></EmptyPanel>
+        <EmptyPanel title={`Nothing in “${active.label}”`}><p>{from || source ? "No work matches these filters." : "Try another view."}</p></EmptyPanel>
       )}
       {groups.map((g) => (
         <section key={g.key} className={g.label ? "sender-group" : undefined} aria-label={g.label ? `From ${g.label}` : undefined}>
@@ -173,7 +137,7 @@ function Queue() {
   const readyCount = items.filter((t) => t.status === "ready").length;
   const loaded = !!list.data;
   const active = FILTERS.find((f) => f.id === filter)!;
-  const title = QUEUE_LAYOUT === "bubbles" && active.id !== "all" ? active.label : "Work queue";
+  const title = active.id === "all" ? "Work queue" : active.label;
 
   return (
     <>
@@ -203,9 +167,7 @@ function Queue() {
         </EmptyPanel>
       )}
 
-      {loaded && items.length > 0 && (QUEUE_LAYOUT === "bubbles"
-        ? <Bubbles items={items} now={now} loaded={loaded} filter={filter} />
-        : <Accordion items={items} now={now} loaded={loaded} />)}
+      {loaded && items.length > 0 && <QueueView items={items} now={now} loaded={loaded} filter={filter} />}
     </>
   );
 }
