@@ -22,7 +22,15 @@ function basisLine(slide: SlideContent): string {
   return [...labels].join("  ·  ");
 }
 
-function addBlock(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideContent, block: ContentBlock, box: BlockBox, organization: OrganizationProfile): void {
+/** Channel series keep their dashboard color across the deck; other charts use the brand colors. */
+function seriesColors(names: string[], organization: OrganizationProfile, dashboard: Dashboard | null): string[] {
+  const brand = [hex(organization.brand.accentColor), hex(organization.brand.primaryColor), "829AB1"];
+  if (names.length === 1) return [brand[0]!];
+  const byName = new Map(dashboard?.channels.map((channel) => [channel.name.toLowerCase(), channel.color]) ?? []);
+  return names.every((name) => byName.has(name.toLowerCase())) ? names.map((name) => byName.get(name.toLowerCase())!) : brand;
+}
+
+function addBlock(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideContent, block: ContentBlock, box: BlockBox, organization: OrganizationProfile, dashboard: Dashboard | null): void {
   const primary = hex(organization.brand.primaryColor);
   const font = organization.brand.fontFamily;
   const labelled = needsBasisLabel(block);
@@ -43,7 +51,7 @@ function addBlock(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideContent
       showValue: true, dataLabelFontSize: 14, dataLabelColor: BODY, dataLabelFormatCode: format,
       catAxisLabelFontSize: 14, catAxisLabelColor: BODY, valAxisLabelFontSize: 12, valAxisLabelColor: MUTED, valAxisLabelFormatCode: money ? "$#,##0" : "#,##0", valAxisMinVal: 0,
       showValAxisTitle: Boolean(chart.unit), valAxisTitle: chart.unit ?? undefined, valAxisTitleFontSize: 12, valAxisTitleColor: MUTED,
-      valGridLine: { color: "D9E2EC", size: 0.5 }, chartColors: chart.series.length === 1 ? [hex(organization.brand.accentColor)] : [hex(organization.brand.accentColor), primary, "829AB1"],
+      valGridLine: { color: "D9E2EC", size: 0.5 }, chartColors: seriesColors(chart.series.map((series) => series.name), organization, dashboard),
     });
     return;
   }
@@ -168,7 +176,7 @@ export async function renderPptx(product: WorkProduct, organization: Organizatio
         const titleSize = fitFont([content.title], SLIDE.w, SLIDE.titleH, TITLE_STEPS, 0) ?? TITLE_STEPS.at(-1)!;
         slide.addText(officeText(content.title), { x: SLIDE.x, y: SLIDE.titleY, w: SLIDE.w, h: SLIDE.titleH, fontFace: font, fontSize: titleSize, bold: true, color: primary, margin: 0, valign: "middle" });
         const boxes = blockBoxes(content);
-        content.blocks.forEach((block, index) => addBlock(pptx, slide, content, block, boxes[index]!, organization));
+        content.blocks.forEach((block, index) => addBlock(pptx, slide, content, block, boxes[index]!, organization, dashboard));
       }
       slide.addText(officeText(basisLine(content)), { x: SLIDE.x, y: 6.78, w: SLIDE.w, h: 0.24, fontFace: font, fontSize: 10, italic: true, color: MUTED, margin: 0 });
       if (content.speakerNotes.trim()) slide.addNotes(officeText(content.speakerNotes));

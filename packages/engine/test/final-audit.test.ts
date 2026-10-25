@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { EngineInput } from "@afterhours/contracts";
 import { calculateSales, createEngine, runWork, type ModelClient } from "../src/index";
 import { buildDashboard } from "../src/dashboard";
+import { renderPptx } from "../src/render/pptx";
 import { inputFor, root, text, withAttachmentText } from "./fixtures";
 import { unzip } from "./zip";
 
@@ -161,5 +162,20 @@ describe("sales dashboard (template layout): report page 1 and the deck cover, b
       const parts = [...unzip(file.bytes)].filter(([name]) => /^(word\/document|ppt\/slides\/slide\d+)\.xml$/.test(name));
       expect(parts.map(([, bytes]) => text(bytes)).join(" ")).not.toContain("Report Time Frame");
     }
+  });
+});
+
+describe("deck charts keep the dashboard's channel colors", () => {
+  it("a two-channel chart elsewhere in a sales deck uses each channel's dashboard color", async () => {
+    const result = await ready(await inputFor("report"));
+    const deck = result.products.find((product) => product.kind === "presentation")!;
+    const dashboard = buildDashboard(calculateSales(csvOf(await inputFor("report"))));
+    const block = { ...deck.slides[1]!.blocks[0]!, chart: { type: "bar" as const, labels: ["January 2026", "February 2026"], unit: "USD", series: [{ name: "Partnerships", values: [4000, 5000] }, { name: "Website", values: [8000, 10000] }] } };
+    const product = { ...deck, slides: [deck.slides[0]!, { ...deck.slides[1]!, blocks: [block] }, ...deck.slides.slice(2)] };
+    const bytes = await renderPptx(product, (await inputFor("report")).organization, dashboard);
+    const charts = [...unzip(bytes)].filter(([name]) => /^ppt\/charts\/chart\d+\.xml$/.test(name)).map(([, data]) => text(data));
+    const bar = charts.find((xml) => xml.includes("<c:barChart>"))!;
+    expect(bar.indexOf("E84F95")).toBeGreaterThan(-1);
+    expect(bar.indexOf("E84F95")).toBeLessThan(bar.indexOf("F5A623"));
   });
 });
