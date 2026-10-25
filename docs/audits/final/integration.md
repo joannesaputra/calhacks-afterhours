@@ -35,12 +35,36 @@ Full findings and the 44 answers: `docs/audits/final/audit.md`. The historical l
 | Actual exports: content/package validity | **BLOCKED** (live files) / **PASS** (re-rendered fixture files) | live `var/live-output/` exists only on Darren's machine |
 | Actual exports: complete visual inspection | **PARTIAL** | 30/30 slides in PowerPoint PASS; DOCX page 1 only (Quick Look); full Word pages NOT RUN |
 | Browser workflow and persisted review | **PASS** | browser 1, 3, 8, 13; QA restart |
-| Gmail OAuth connection | **NOT RUN** | offline OAuth tests PASS; needs Darren's Google client and consent |
-| Real Gmail email → queued task | **NOT RUN** | `pnpm gmail:poll-once` and procedure ready and tested with a fake inbox |
+| Gmail OAuth connection | **PASS (Joanne's machine, one account)** | see "Live Gmail check" below; Darren's machine still needs its own client or connection |
+| Real Gmail email → queued task | **PASS (one email)** | `pnpm gmail:poll-once`: 1 task queued, repeat 0, zero model calls; see below |
 | Gmail → live Claude → verified files | **NOT RUN** | needs a separate paid authorization |
 | Live WhatsApp delivery | **NOT RUN** | adapter tests with fake provider only |
 | Docker/remote deployment | **NOT RUN** | Docker not installed here; no host |
 | Actual unattended overnight operation | **NOT RUN** | no always-on host |
+
+## Live Gmail check (2026-10-24, Joanne's machine, code `8e1cda8`)
+
+OAuth connection verified; one real email reached the queue. This is not Gmail → live Claude.
+
+- Google Cloud project `afterhours-512701` (owned by Joanne): Gmail API enabled; Auth platform External / Testing, one
+  test user (Joanne's own inbox); Data Access only `gmail.readonly`; Web application client "AfterHours local web" with the
+  single redirect URI `http://localhost:3000/api/integrations/gmail/callback`. Client ID and secret live only in Joanne's
+  untracked `.env`.
+- Only the API and web app were running (`pnpm dev:api`, `pnpm dev:web`); no worker (`pnpm check:worker`: stale).
+  `GENERATION_MODE=fixture`, `NOTIFICATION_CHANNEL=outbox`.
+- Connect: Google showed the expected "hasn't verified this app" warning for a Testing app; Joanne approved. Settings
+  then showed Connected with the expected account; `integrations.state=connected`, credentials stored as `v1.` AES-GCM;
+  no secret or token pattern in the API log (0 matches).
+- Intake: approved sender = the same inbox (self-sent mail lands in Inbox); Automation and Prepare automatically on for
+  the window only. One new synthetic Maple & Moss email sent by Joanne. `pnpm gmail:poll-once` → `status ok, ingested 1,
+  ignored 2` (two unrelated new inbox messages: `sender_not_allowed` audit rows only, no task), new task
+  `e8ec9d9e-f54c-4760-99a2-739606190eb1`: `ingestionMode=gmail`, `generationMode=fixture`, `queued`, receivedAt
+  `2026-10-25T02:08:56Z` (Gmail internalDate) vs createdAt `02:09:08.674Z`, body 1,450 chars, 0 attachments; job
+  `queued`, attempts 0, no lease; only event "Gmail message received and queued."; 0 artifacts.
+- Repeat `pnpm gmail:poll-once` → `ingested 0`, no new task, queue still 1.
+- Automation turned off afterwards. The task stays queued and unexecuted. Running it later in fixture mode needs a worker;
+  a live Claude run needs a new task ingested in live mode (mode is snapshotted) and separate paid authorization.
+- Model calls: 0. Sends: 0.
 
 ## Gmail setup for Darren (no secrets here)
 

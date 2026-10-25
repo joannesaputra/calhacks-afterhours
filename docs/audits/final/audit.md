@@ -10,8 +10,8 @@ Corepack). Date: 2026-10-24. Branch `audit/final-all`. No teammate prompt was ne
 | CORE APPLICATION AUDIT | **PASS** (4 defects fixed, open items listed) | 356/356 unit tests, browser 25 passed + 1 explained skip, QA 53/53, all on `c20fb24` |
 | EXPORTED FILE CONTENT/STRUCTURE | **PASS for re-rendered fixture files / BLOCKED for the original live files** | live `var/live-output/` exists only on Darren's machine; not on this one |
 | FULL EXPORTED FILE VISUAL REVIEW | **PARTIAL**: all 30 slides of 6 decks PASS in Microsoft PowerPoint; DOCX page 1 only (Quick Look); full DOCX pages **NOT RUN** | Word and Pages AppleScript export both fail on this machine (-1708) |
-| GMAIL OAUTH CONNECTION | **NOT RUN** (offline OAuth boundary tests PASS) | needs Darren's Google Cloud client and consent |
-| REAL GMAIL EMAIL → QUEUED TASK | **NOT RUN** (tool and procedure ready: `pnpm gmail:poll-once`) | needs a connected test inbox |
+| GMAIL OAUTH CONNECTION | **PASS** (Joanne's machine, one account; added after the audit) | `integration.md` "Live Gmail check" |
+| REAL GMAIL EMAIL → QUEUED TASK | **PASS** (one email, zero model calls) | task `e8ec9d9e-…`, repeat poll created nothing |
 | GMAIL → LIVE CLAUDE → FILES | **NOT RUN** | needs a separate, explicit paid authorization |
 | LIVE WHATSAPP DELIVERY | **NOT RUN** | adapter tests with fake provider only |
 | OVERNIGHT/REMOTE OPERATION | **NOT RUN** | no always-on host, no Docker here |
@@ -187,10 +187,12 @@ Format: status — expected / observed — evidence.
 - **D7** PASS — ignore vs queue and snapshot documented / documented and proven — runbook "Settings semantics",
   `final-audit.test.ts` two semantics tests, `batch4.test.ts` snapshot test.
 - **D8** PASS — secret-free exact steps / `integration.md` "Gmail setup for Darren"; uses web callback only.
-- **D9** NOT RUN — no consent occurred. What would prove it: Settings shows the expected account, state connected, no
-  error marker. Untested: real token exchange, refresh, revocation, Google error texts.
-- **D10** NOT RUN — no inbox. Generation is prevented deterministically by construction (no engine import) and by test
-  (`poll-once.test.ts`: live-mode task stays queued, attempts 0).
+- **D9** PASS (added after the audit, Joanne's machine) — Settings showed Connected with the expected account, state
+  `connected`, credentials encrypted, no secret in logs. Untested: token refresh after expiry, revocation, the 7-day
+  Testing expiry, Darren's machine.
+- **D10** PASS (added after the audit) — one real self-sent email → one `gmail` task, queued, attempts 0, no files;
+  repeat poll ingested 0; two unrelated senders ignored; zero model calls (no worker running, fixture mode, poll-once has
+  no engine import).
 - **D11** PASS — one candidate / all fixes in `c20fb24`, checks and browser/QA on it — command table.
 - **D12** PASS — honest records / this file, `integration.md`; historical record left intact in
   `docs/batches/batch-7/integration.md`.
