@@ -2,7 +2,7 @@ import PptxGenJS from "pptxgenjs";
 import type { ContentBlock, OrganizationProfile, SlideContent, WorkProduct } from "@afterhours/contracts";
 import type { Dashboard, Direction } from "../dashboard";
 import { EngineError } from "../errors";
-import { blockBoxes, blockParagraphs, bodyBox, bodySteps, COVER_TITLE, fitFont, headingH, labelH, MIN_BODY_PT, needsBasisLabel, SLIDE, TITLE_STEPS, type BlockBox } from "../layout";
+import { blockBoxes, blockParagraphs, bodyBox, bodySteps, COVER_TITLE, fitFont, headingH, heightFor, labelH, MIN_BODY_PT, needsBasisLabel, SLIDE, TITLE_STEPS, type BlockBox } from "../layout";
 import { officeText } from "../text";
 import { columnWidths } from "./docx";
 
@@ -135,6 +135,152 @@ function addDashboard(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideCon
   });
 }
 
+const CARD_LINE = "D9E2EC";
+const BAND_BOTTOM = 6.65;
+const isText = (block: ContentBlock) => block.kind === "bullets" || block.kind === "paragraph";
+
+/** Which code-built visual supports a text-only slide of a sales deck, judged from the slide's own words. */
+function visualFor(content: SlideContent, dashboard: Dashboard | null): "orders" | "channels" | null {
+  if (!dashboard || content.layout === "title" || content.layout === "closing" || !content.blocks.length || !content.blocks.every(isText)) return null;
+  const words = [content.title, ...content.blocks.flatMap((block) => [block.heading ?? "", ...blockParagraphs(block)])].join(" ").toLowerCase();
+  if (/\border/.test(words)) return "orders";
+  if (dashboard.channels.some((channel) => !channel.name.startsWith("Others") && words.includes(channel.name.toLowerCase()))) return "channels";
+  return null;
+}
+
+function card(pptx: PptxGenJS, slide: PptxGenJS.Slide, x: number, y: number, w: number, h: number, accent: string): void {
+  slide.addShape(pptx.ShapeType.roundRect, { x, y, w, h, rectRadius: 0.08, fill: { color: "FFFFFF" }, line: { color: CARD_LINE, width: 0.75 } });
+  slide.addShape(pptx.ShapeType.rect, { x, y: y + 0.12, w: 0.06, h: h - 0.24, fill: { color: accent }, line: { color: accent } });
+}
+
+/** Text in compact cards across the top, then a chart band of the calculated numbers the slide talks about. */
+function addTextWithVisual(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideContent, dashboard: Dashboard, visual: "orders" | "channels", organization: OrganizationProfile): boolean {
+  const boxes = blockBoxes(content);
+  const maxH = 2.5;
+  const heights: number[] = [];
+  for (const [index, block] of content.blocks.entries()) {
+    const body = bodyBox(block, { ...boxes[index]!, h: maxH }, needsBasisLabel(block));
+    const size = fitFont(blockParagraphs(block), body.w, body.h, bodySteps(content.layout), PARA_SPACE);
+    if (size === null) return false;
+    heights.push(maxH - body.h + heightFor(blockParagraphs(block), body.w - 0.2, size, PARA_SPACE) + 0.3);
+  }
+  const h = Math.min(maxH, Math.max(1.2, ...heights));
+  const accent = hex(organization.brand.accentColor);
+  content.blocks.forEach((block, index) => {
+    const box = boxes[index]!;
+    card(pptx, slide, box.x - 0.2, SLIDE.bodyY - 0.1, box.w + 0.35, h + 0.15, accent);
+    addBlock(pptx, slide, content, block, { x: box.x, y: SLIDE.bodyY, w: box.w, h }, organization, dashboard);
+  });
+  const top = SLIDE.bodyY + h + 0.3;
+  const bandH = BAND_BOTTOM - top;
+  const font = organization.brand.fontFamily;
+  const axis = { catAxisLabelFontSize: 12, catAxisLabelColor: BODY, valAxisLabelFontSize: 10, valAxisLabelColor: MUTED, valAxisMinVal: 0, valGridLine: { color: "E4E9EF", size: 0.5 }, showValue: true, dataLabelFontSize: 11, dataLabelColor: BODY, titleFontSize: 13, titleColor: BODY, titleFontFace: font, showTitle: true };
+  if (visual === "channels") {
+    slide.addChart(pptx.ChartType.bar, dashboard.channels.map((channel) => ({ name: officeText(channel.name), labels: dashboard.months.map(officeText), values: channel.revenue })), {
+      x: SLIDE.x, y: top, w: SLIDE.w, h: bandH, barDir: "col", barGrouping: "clustered", chartColors: dashboard.channels.map((channel) => channel.color),
+      title: "Revenue per channel by month (USD)", showLegend: true, legendPos: "r", legendFontSize: 11, dataLabelFormatCode: "$#,##0", valAxisLabelFormatCode: "$#,##0", ...axis,
+    });
+    return true;
+  }
+  const aov = dashboard.averageOrderValue;
+  const both = aov[0] !== null && aov[1] !== null;
+  const w = both ? (SLIDE.w - 0.4) / 2 : SLIDE.w;
+  slide.addChart(pptx.ChartType.bar, [{ name: "Orders", labels: dashboard.months.map(officeText), values: dashboard.orders }], {
+    x: SLIDE.x, y: top, w, h: bandH, barDir: "col", chartColors: [accent], title: "Orders per month", showLegend: false, dataLabelFormatCode: "#,##0", valAxisLabelFormatCode: "#,##0", ...axis,
+  });
+  if (both) {
+    const cents = aov.some((value) => !Number.isInteger(value));
+    slide.addChart(pptx.ChartType.bar, [{ name: "Average order value", labels: dashboard.months.map(officeText), values: aov as [number, number] }], {
+      x: SLIDE.x + w + 0.4, y: top, w, h: bandH, barDir: "col", chartColors: [hex(organization.brand.primaryColor)], title: "Average order value (USD)", showLegend: false,
+      dataLabelFormatCode: cents ? "$#,##0.00" : "$#,##0", valAxisLabelFormatCode: "$#,##0", ...axis,
+    });
+  }
+  return true;
+}
+
+/** A short single list becomes numbered cards in a grid instead of a few lines of text on an empty slide. */
+function addCardGrid(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideContent, organization: OrganizationProfile): boolean {
+  const block = content.blocks[0];
+  if (content.blocks.length !== 1 || !block || block.kind !== "bullets" || block.items.length < 2 || block.items.length > 6) return false;
+  const font = organization.brand.fontFamily;
+  const accent = hex(organization.brand.accentColor);
+  const labelled = needsBasisLabel(block);
+  const n = block.items.length;
+  const cols = n <= 3 ? n : n === 4 ? 2 : 3;
+  const rows = Math.ceil(n / cols);
+  const top = SLIDE.bodyY + (block.heading ? headingH : 0) + (labelled ? labelH : 0) + 0.2;
+  const gap = 0.3;
+  const cardW = (SLIDE.w - (cols - 1) * gap) / cols;
+  const cardH = Math.min(2.4, (BAND_BOTTOM - top - (rows - 1) * gap) / rows);
+  const textW = cardW - 0.5;
+  const textH = cardH - 0.95;
+  const sizes = block.items.map((item) => fitFont([item], textW, textH, [22, 20, 18, 16], 0));
+  if (sizes.some((size) => size === null)) return false;
+  const size = Math.min(...(sizes as number[]));
+  if (block.heading) {
+    const headingSize = fitFont([block.heading], SLIDE.w, headingH + 0.1, [19, 17, 16], 0) ?? 16;
+    slide.addText(officeText(block.heading), { x: SLIDE.x, y: SLIDE.bodyY, w: SLIDE.w, h: headingH, fontFace: font, fontSize: headingSize, bold: true, color: hex(organization.brand.primaryColor), margin: 0, valign: "top" });
+  }
+  if (labelled) slide.addText(block.basis === "recommendation" ? "RECOMMENDATION" : "ASSUMPTION", { x: SLIDE.x, y: SLIDE.bodyY + (block.heading ? headingH : 0), w: SLIDE.w, h: labelH - 0.05, fontFace: font, fontSize: 11, bold: true, color: accent, margin: 0, charSpacing: 1 });
+  block.items.forEach((item, index) => {
+    const x = SLIDE.x + (index % cols) * (cardW + gap);
+    const y = top + Math.floor(index / cols) * (cardH + gap);
+    slide.addShape(pptx.ShapeType.roundRect, { x, y, w: cardW, h: cardH, rectRadius: 0.1, fill: { color: "FFFFFF" }, line: { color: CARD_LINE, width: 0.75 } });
+    slide.addShape(pptx.ShapeType.ellipse, { x: x + 0.25, y: y + 0.22, w: 0.5, h: 0.5, fill: { color: accent }, line: { color: accent } });
+    slide.addText(String(index + 1), { x: x + 0.25, y: y + 0.22, w: 0.5, h: 0.5, fontFace: font, fontSize: 16, bold: true, color: "FFFFFF", align: "center", valign: "middle", margin: 0 });
+    slide.addText(officeText(item), { x: x + 0.25, y: y + 0.85, w: textW, h: textH, fontFace: font, fontSize: size, color: BODY, margin: 0, valign: "top" });
+  });
+  return true;
+}
+
+/** Text-only slides with one or two blocks: each point becomes a row card, a paragraph a quote-style card, filling the slide. */
+function addStackedCards(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideContent, organization: OrganizationProfile): boolean {
+  if (content.layout === "title" || !content.blocks.length || content.blocks.length > 2 || !content.blocks.every(isText)) return false;
+  const font = organization.brand.fontFamily;
+  const accent = hex(organization.brand.accentColor);
+  const primary = hex(organization.brand.primaryColor);
+  const boxes = blockBoxes(content);
+  const gap = 0.18;
+  type Plan = { box: BlockBox; top: number; rows: Array<{ text: string; h: number }>; size: number };
+  const plans: Plan[] = [];
+  for (const [index, block] of content.blocks.entries()) {
+    const box = boxes[index]!;
+    const top = SLIDE.bodyY + (block.heading ? headingH : 0) + (needsBasisLabel(block) ? labelH : 0) + 0.1;
+    const avail = BAND_BOTTOM - top;
+    const items = block.kind === "bullets" ? block.items : [block.text ?? ""];
+    if (!items.length || items.length > 6) return false;
+    const textW = box.w - 0.75;
+    let chosen: Plan | null = null;
+    for (const size of [20, 18, 16]) {
+      const heights = items.map((item) => Math.max(0.8, heightFor([item], textW, size, 0) + 0.4));
+      const total = heights.reduce((sum, h) => sum + h, 0) + (items.length - 1) * gap;
+      if (total <= avail) {
+        // Stretch rows to use the slide height, but never into tall empty boxes.
+        const stretch = Math.min((avail - (items.length - 1) * gap) / items.length, 1.25);
+        chosen = { box, top, size, rows: items.map((text, i) => ({ text, h: Math.max(heights[i]!, block.kind === "bullets" ? stretch : heights[i]!) })) };
+        break;
+      }
+    }
+    if (!chosen) return false;
+    plans.push(chosen);
+  }
+  content.blocks.forEach((block, index) => {
+    const plan = plans[index]!;
+    const { box } = plan;
+    if (block.heading) slide.addText(officeText(block.heading), { x: box.x, y: SLIDE.bodyY, w: box.w, h: headingH, fontFace: font, fontSize: fitFont([block.heading], box.w, headingH + 0.1, [19, 17, 16], 0) ?? 16, bold: true, color: primary, margin: 0, valign: "top" });
+    if (needsBasisLabel(block)) slide.addText(block.basis === "recommendation" ? "RECOMMENDATION" : "ASSUMPTION", { x: box.x, y: SLIDE.bodyY + (block.heading ? headingH : 0), w: box.w, h: labelH - 0.05, fontFace: font, fontSize: 11, bold: true, color: accent, margin: 0, charSpacing: 1 });
+    let y = plan.top;
+    for (const row of plan.rows) {
+      slide.addShape(pptx.ShapeType.roundRect, { x: box.x, y, w: box.w, h: row.h, rectRadius: 0.08, fill: { color: "FFFFFF" }, line: { color: CARD_LINE, width: 0.75 } });
+      if (block.kind === "bullets") slide.addShape(pptx.ShapeType.ellipse, { x: box.x + 0.22, y: y + row.h / 2 - 0.09, w: 0.18, h: 0.18, fill: { color: accent }, line: { color: accent } });
+      else slide.addShape(pptx.ShapeType.rect, { x: box.x, y: y + 0.12, w: 0.07, h: row.h - 0.24, fill: { color: accent }, line: { color: accent } });
+      slide.addText(officeText(row.text), { x: box.x + 0.55, y, w: box.w - 0.75, h: row.h, fontFace: font, fontSize: plan.size, color: BODY, margin: 0, valign: "middle" });
+      y += row.h + gap;
+    }
+  });
+  return true;
+}
+
 export async function renderPptx(product: WorkProduct, organization: OrganizationProfile, dashboard: Dashboard | null = null): Promise<Uint8Array> {
   try {
     const pptx = new PptxGenJS();
@@ -175,8 +321,11 @@ export async function renderPptx(product: WorkProduct, organization: Organizatio
       } else {
         const titleSize = fitFont([content.title], SLIDE.w, SLIDE.titleH, TITLE_STEPS, 0) ?? TITLE_STEPS.at(-1)!;
         slide.addText(officeText(content.title), { x: SLIDE.x, y: SLIDE.titleY, w: SLIDE.w, h: SLIDE.titleH, fontFace: font, fontSize: titleSize, bold: true, color: primary, margin: 0, valign: "middle" });
-        const boxes = blockBoxes(content);
-        content.blocks.forEach((block, index) => addBlock(pptx, slide, content, block, boxes[index]!, organization, dashboard));
+        const visual = visualFor(content, dashboard);
+        if (!(visual && addTextWithVisual(pptx, slide, content, dashboard!, visual, organization)) && !addCardGrid(pptx, slide, content, organization) && !addStackedCards(pptx, slide, content, organization)) {
+          const boxes = blockBoxes(content);
+          content.blocks.forEach((block, index) => addBlock(pptx, slide, content, block, boxes[index]!, organization, dashboard));
+        }
       }
       slide.addText(officeText(basisLine(content)), { x: SLIDE.x, y: 6.78, w: SLIDE.w, h: 0.24, fontFace: font, fontSize: 10, italic: true, color: MUTED, margin: 0 });
       if (content.speakerNotes.trim()) slide.addNotes(officeText(content.speakerNotes));

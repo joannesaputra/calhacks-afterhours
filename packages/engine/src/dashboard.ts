@@ -23,6 +23,9 @@ export interface Dashboard {
   comparison: string;
   question: string;
   months: [string, string];
+  /** Total orders and average order value (dollars, null without orders) for the two months. */
+  orders: [number, number];
+  averageOrderValue: [number | null, number | null];
   kpis: Kpi[];
   channels: DashboardChannel[];
   note: string;
@@ -73,6 +76,8 @@ export function buildDashboard(metrics: SalesMetrics): Dashboard {
     timeFrame: m2, comparison: m1,
     question: `How is sales performance trending in ${m2}?`,
     months: [monthLabel(first.month, false), monthLabel(second.month, false)],
+    orders: [first.orders, second.orders],
+    averageOrderValue: [first.averageOrderValueMinor === null ? null : first.averageOrderValueMinor / 100, second.averageOrderValueMinor === null ? null : second.averageOrderValueMinor / 100],
     kpis: [
       { label: "Total revenue", value: usd(second.revenueMinor), ...change(second.revenueMinor, first.revenueMinor) },
       { label: "Orders", value: second.orders.toLocaleString("en-US"), ...change(second.orders, first.orders) },

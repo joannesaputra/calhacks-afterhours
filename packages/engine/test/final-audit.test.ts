@@ -153,7 +153,8 @@ describe("sales dashboard (template layout): report page 1 and the deck cover, b
     expect(slides).toHaveLength(5);
     const cover = part(pptx, "ppt/slides/slide1.xml");
     for (const expected of ["Report Time Frame", "February 2026", "$15,000", "▲ +25%", "Website", "66.7%"]) expect(cover).toContain(expected);
-    expect([...unzip(pptx).keys()].filter((name) => /^ppt\/charts\/chart\d+\.xml$/.test(name))).toHaveLength(3);
+    // Cover line + doughnut, the revenue chart, then code-built bands: channel revenue (slide 3), orders and AOV (slide 4).
+    expect([...unzip(pptx).keys()].filter((name) => /^ppt\/charts\/chart\d+\.xml$/.test(name))).toHaveLength(6);
   });
 
   it("proposals never get the sales dashboard", async () => {
@@ -177,5 +178,37 @@ describe("deck charts keep the dashboard's channel colors", () => {
     const bar = charts.find((xml) => xml.includes("<c:barChart>"))!;
     expect(bar.indexOf("E84F95")).toBeGreaterThan(-1);
     expect(bar.indexOf("E84F95")).toBeLessThan(bar.indexOf("F5A623"));
+  });
+});
+
+describe("fuller slides: chart bands from calculated data and card layouts, without changing the deck's content", () => {
+  const slideXml = (bytes: Uint8Array, n: number) => text(unzip(bytes).get(`ppt/slides/slide${n}.xml`)!);
+  const chartOf = (bytes: Uint8Array, n: number) => {
+    const rels = text(unzip(bytes).get(`ppt/slides/_rels/slide${n}.xml.rels`) ?? new Uint8Array());
+    return [...rels.matchAll(/charts\/(chart\d+\.xml)/g)].map((match) => text(unzip(bytes).get(`ppt/charts/${match[1]}`)!));
+  };
+
+  it("sales deck: the channel slide gets a per-channel revenue chart, the orders slide orders and AOV charts, the closing list numbered cards", async () => {
+    const result = await ready(await inputFor("report"));
+    const pptx = result.files.find((file) => file.format === "pptx")!.bytes;
+    const channel = chartOf(pptx, 3).join("");
+    expect(channel).toMatch(/<c:v>8000<\/c:v>[\s\S]*<c:v>10000<\/c:v>/);
+    expect(channel).toMatch(/<c:v>4000<\/c:v>[\s\S]*<c:v>5000<\/c:v>/);
+    const orders = chartOf(pptx, 4);
+    expect(orders.join("")).toMatch(/<c:v>120<\/c:v>[\s\S]*<c:v>150<\/c:v>/);
+    expect(orders).toHaveLength(2);
+    const closing = slideXml(pptx, 5);
+    expect(closing.match(/prstGeom prst="roundRect"/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
+    expect(closing.replace(/<[^>]+>/g, " ")).toMatch(/\b1\b[\s\S]*Do not infer campaign causality/);
+    // The structured content behind previews is unchanged: one chart block, the revenue chart.
+    const blocks = result.products.flatMap((product) => [...product.blocks, ...product.slides.flatMap((slide) => slide.blocks)]);
+    expect(blocks.filter((block) => block.chart).every((block) => block.chart!.series[0]!.values.join() === "12000,15000")).toBe(true);
+  });
+
+  it("proposal deck: short lists become cards; no sales charts are added", async () => {
+    const result = await ready(await inputFor("proposal"));
+    const pptx = result.files.find((file) => file.format === "pptx")!.bytes;
+    expect([...unzip(pptx).keys()].filter((name) => /^ppt\/charts\/chart\d+\.xml$/.test(name))).toHaveLength(0);
+    for (const n of [2, 3, 4, 5]) expect(slideXml(pptx, n)).toContain('prst="roundRect"');
   });
 });
