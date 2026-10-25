@@ -12,9 +12,9 @@
   --ink-2: rgba(255, 255, 255, 0.64);
   --border: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.2);
-  --accent: #4ade80;
-  --accent-strong: #4ade80;
-  --accent-soft: rgba(74, 222, 128, 0.12);
+  --accent: #16a34a;
+  --accent-strong: #16a34a;
+  --accent-soft: rgba(22, 163, 74, 0.16);
   --warn-ink: #fbbf24;
   --warn-bg: rgba(251, 191, 36, 0.1);
   --warn-border: rgba(251, 191, 36, 0.34);
@@ -155,7 +155,7 @@ ul, ol { padding-left: 1.25rem; }
 .badge-neutral { background: var(--hover); color: var(--ink-2); border-color: var(--border); }
 .badge-outline { background: var(--surface); color: var(--ink); border-color: var(--border); }
 .badge-info { background: var(--info-bg); color: var(--info-ink); border-color: var(--info-border); }
-.badge-good { background: var(--accent-soft); color: var(--accent-strong); border-color: rgba(74, 222, 128, 0.36); }
+.badge-good { background: var(--accent-soft); color: var(--accent-strong); border-color: rgba(22, 163, 74, 0.5); }
 .badge-good-solid { background: var(--accent-strong); color: #0a0a0a; }
 .badge-warn { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-border); }
 .badge-bad { background: var(--bad-bg); color: var(--bad-ink); border-color: var(--bad-border); }
