@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { ArrowRight, FileText, TriangleAlert } from "lucide-react";
+import { ArrowRight, TriangleAlert } from "lucide-react";
 import type { TaskSummary } from "@afterhours/contracts";
 import { describeError } from "@/lib/api";
 import { formatElapsed, formatRelative, truncate } from "@/lib/format";
@@ -75,7 +75,6 @@ export function TaskCard({ task, nowMs }: { task: TaskSummary; nowMs: number }) 
         <IngestionBadge mode={task.ingestionMode} />
         <GenerationBadge mode={task.generationMode} />
         {task.requestedOutputs.map((o) => <span key={o} className="badge badge-neutral">{OUTPUT_LABEL[o]}</span>)}
-        {task.artifactCount > 0 && <span className="badge badge-neutral"><FileText size={14} aria-hidden />{task.artifactCount} file{task.artifactCount === 1 ? "" : "s"}</span>}
         {task.warningCount > 0 && <span className="badge badge-warn"><TriangleAlert size={14} aria-hidden />{task.warningCount} warning{task.warningCount === 1 ? "" : "s"}</span>}
       </div>
 
