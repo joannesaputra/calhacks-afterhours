@@ -32,7 +32,40 @@ Two UIs defined the same four routes, so only one set can build. Decision (Maric
 
 ## Claude provider in the candidate
 
-`packages/engine/src/providers/anthropic.ts` (Messages API over `fetch`, no SDK, typed errors, JSON-only instruction, `max_tokens` → incomplete), `providers/env.ts` (`MODEL_PROVIDER=anthropic` only), `liveModelProblem` in `packages/data/src/config.ts`. The OpenAI adapter, `OPENAI_API_KEY` and the `openai` provider value are gone; `MODEL_PROVIDER=openai` now fails configuration at startup. Tested with a fake `fetch` (status mapping, key never echoed, incomplete, fence unwrapping, environment selection). **Not run against the real Anthropic API**: a key was configured locally but no live task was started, so the key, the model id and real output validity are unverified.
+`packages/engine/src/providers/anthropic.ts` (Messages API over `fetch`, no SDK, typed errors, JSON-only instruction, `max_tokens` → incomplete), `providers/env.ts` (`MODEL_PROVIDER=anthropic` only), `liveModelProblem` in `packages/data/src/config.ts`. The OpenAI adapter, `OPENAI_API_KEY` and the `openai` provider value are gone; `MODEL_PROVIDER=openai` now fails configuration at startup. Tested with a fake `fetch` (status mapping, key never echoed, incomplete, fence unwrapping, environment selection). **Live result:** one real run failed output validation (see "Live Claude smoke test" below); the key, the model id and billing worked.
+
+## Live Claude smoke test (one task): FAIL
+
+One real task through the real API, queue, worker and the Claude provider, run once and not repeated.
+
+| Item | Value |
+|---|---|
+| Tested commit | `81c0bca` (`integration/batch7`; code identical to `09f54cc`, the later commits are docs only) |
+| Scenario | `proposal` (the demo Maple & Moss email and brief), demo intake |
+| Task | `a8f10320-6f3d-45e9-9e52-e111d7dc8251`, revision 1 |
+| Mode and model | `generationMode=live`; status endpoint reported provider `anthropic`, model `claude-sonnet-5-5`, configured |
+| Setup | API on port 4631 and the worker (both started from the repository with the existing local `.env`), scratch database and artifact directory under `var/smoke/` (deleted afterwards). The web app was not started: files were to be downloaded from the application's API download endpoint, but none were produced. |
+| Safeguards | Fixture fallback: none exists in live mode. Automatic retry: the worker allows a second attempt for retryable errors, so the run polled the task and would have stopped the worker before one started; it was not needed because the error was nonretryable. Existing call limits (3 calls per attempt, 60 s per call, 12,000 output cap) were not changed. Notification channel `outbox`, Gmail `disconnected`, no WhatsApp configuration: no email or message could be sent, and the task created no notification. |
+| Outcome | `failed`, nonretryable, `MODEL_INVALID_OUTPUT`: "The repaired live model output still failed validation: Schema: plan.requestedOutputs.0 Invalid option: expected one of "proposal"\|"report"\|"presentation"" |
+| Credentials, model name, billing | All worked: the provider returned two completed responses. The provider did not reject the key, the model id or the account. |
+
+**Actual provider usage, from the task's progress events** (the only usage record; provider request ids are not stored):
+
+| Call | Purpose | Duration | Input | Output |
+|---|---|---|---|---|
+| 1 of 3 | generate | 24,352 ms | 1,840 | 4,225 |
+| 2 of 3 | repair | 26,231 ms | 6,064 | 4,908 |
+| Total | 2 calls | about 50.6 s | 7,904 | 9,133 |
+
+(The progress log also shows: the first response failed 12 validation checks, one bounded repair was requested, and the repaired response still failed.) A monetary cost was not calculated: no price list is recorded in the repository.
+
+**Artifact verification: not possible.** No DOCX, no PPTX and no preview were produced (0 artifacts, 0 products, 0 notifications), so downloads, contents, calculations and the five-slide count were not verified for live output. Nothing in this run should be read as evidence that live Claude generation works.
+
+**Likely cause (read from the code, not confirmed by a second call).** `SYSTEM` in `packages/engine/src/live.ts` tells the model to return "AfterHours WorkPlan and WorkProduct shapes" but the payload contains no schema, enum list or example, so the model has to guess field names and values such as `requestedOutputs` (`proposal`, `report`, `presentation`). The repair call only lists the validation errors. The model output itself is not stored, so the exact wrong value is unknown. Joanne's live-path tests use a scripted fake client built from the fixture engine's own valid output, which is why they could not see this. Suggested fix (owner: Joanne): put the exact JSON shape and enum values for `WorkPlan` and `WorkProduct` into the prompt (or derive it from the Zod schemas), add a test that the prompt contains every enum value, then run one more live smoke test. Not done in this task, because the instruction was one task only.
+
+**Not verified:** whether a corrected prompt produces valid, grounded output; live output quality; per-call cost; anything about Word rendering; whether the key works with models other than `claude-sonnet-5-5`.
+
+Secrets: the key was read only by the server process; it is not in the repository, the logs (0 matches) or this report.
 
 ## Commands and exit codes (fresh `git clone --no-hardlinks` of `09f54cc`, clean status before and after)
 
@@ -66,7 +99,7 @@ Notes on how these ran:
 
 | Item | Status | Owner / path |
 |---|---|---|
-| Claude live generation against the real API | NOT RUN (key present, never called) | Darren, one deliberate billed smoke test |
+| Claude live generation | **FAIL** in one real run (`MODEL_INVALID_OUTPUT`: the prompt does not give the model the plan schema); credentials, model and billing worked | Joanne (prompt/schema), then one more live run |
 | Live Gmail, live WhatsApp (Twilio adapter exists, no account/eligibility) | BLOCKED | external |
 | Word rendering of the DOCX; PowerPoint/Word visual check on this candidate | NOT RUN | anyone with Word |
 | Docker, remote host, real overnight run, two timed team rehearsals | NOT RUN | needs a host and the team |
