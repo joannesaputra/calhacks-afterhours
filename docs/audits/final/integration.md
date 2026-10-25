@@ -131,6 +131,21 @@ no text, only `maple-and-moss-brief.md` (task `0bc377e7-8b21-4c32-b7dd-dea7c3e98
 1 call (5,215 / 4,223 tokens), 5 slide parts, USD 6,000 and four weeks quoted from the brief, notification simulated.
 Afterwards Automation off, `GENERATION_MODE=fixture`, no worker, queue empty.
 
+## Sales dashboard template and Claude Opus (2026-10-25, code `071a79b`)
+
+Sales work now opens with a template-style dashboard (dark "Report Time Frame | month (Comparing to month)" bar,
+organization mark, title, four KPI tiles with change arrows, "How is … trending" heading, per-channel line chart, share
+doughnut and channel list in the deck; header, tiles, share table and text bars on page 1 of the report, then a page
+break). Every dashboard value comes from `buildDashboard(metrics)` in `packages/engine/src/dashboard.ts`, never from the
+model. The deck cover becomes the dashboard, so the requested slide count is unchanged; channel series keep their
+dashboard colors across the deck. Proposals are unchanged.
+
+Checks on `071a79b`: typecheck, lint, build 0; 366 tests; browser 25 passed + 1 explained skip; QA 53/53. Live: Joanne
+switched `MODEL_NAME` to `claude-opus-5-5` and sent a real sales email (attachment only, so the O7 question was asked and
+answered in the UI): revision 2 `ready` in one Opus call (32.7 s, 5,470 / 4,227 tokens), 5 slides, dashboard cover and
+report page 1 rendered with the calculated values (PowerPoint PDF; Word page 1 via Quick Look). The 60 s per-call limit
+was not reached. Afterwards Automation off, `GENERATION_MODE=fixture`, app stopped.
+
 ## Gmail setup for Darren (no secrets here)
 
 1. Google Cloud project → enable **Gmail API**.
