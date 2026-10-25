@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft, CalendarClock, FileText, Hourglass, MinusCircle, Paperclip } from "lucide-react";
 import type { TaskDetail, TaskEvent } from "@afterhours/contracts";
@@ -8,8 +9,11 @@ import { useNow, useSettings, useTask, useTaskContext } from "@/lib/hooks";
 import { ContextPhase, ContextUsed } from "./context-panel";
 import { ApiError } from "@/lib/api";
 import { GenerationBadge, IngestionBadge, StatusBadge } from "./badges";
+import { DeleteTaskControl } from "./delete-task";
 import { FileCard } from "./files";
 import { NotificationRow } from "./notification-row";
+import { FileDrawer } from "./preview/file-drawer";
+import { ReplyPanel } from "./reply-panel";
 import { ProductPreview } from "./preview/product-preview";
 import { ClosePanel, EarlierAnswers, FailedPanel, NeedsInputPanel, ReviewPanel } from "./review-panels";
 import { useShell } from "./shell";
@@ -174,6 +178,7 @@ export function TaskDetailView({ id }: { id: string }) {
   const { workerHealthy } = useShell();
   const settings = useSettings();
   const tz = settings.data?.organization.timezone;
+  const [drawer, setDrawer] = useState<{ artifactId: string; opener: HTMLElement | null } | null>(null);
 
   if (q.isPending) return <SkeletonCards count={2} />;
   if (q.isError) {
@@ -202,6 +207,7 @@ export function TaskDetailView({ id }: { id: string }) {
             Revision {task.revision} · <span>Entered the system {formatDateTime(task.createdAt, tz)}</span> · <span>Original email received {formatDateTime(detail.email.receivedAt, tz)}</span>
           </p>
         </div>
+        <DeleteTaskControl detail={detail} />
       </div>
       <div className="chips">
         <StatusBadge status={task.status} workerHealthy={workerHealthy} />
@@ -242,7 +248,7 @@ export function TaskDetailView({ id }: { id: string }) {
       {hasFiles && (
         <section aria-labelledby="files-h" className="stack-sm">
           <h2 id="files-h" className="h3">Files</h2>
-          {detail.artifacts.map((a) => <FileCard key={a.id} artifact={a} revision={a.revision} />)}
+          {detail.artifacts.map((a) => <FileCard key={a.id} artifact={a} revision={a.revision} previewing={drawer?.artifactId === a.id} onPreview={(art, opener) => setDrawer(drawer?.artifactId === art.id ? null : { artifactId: art.id, opener })} />)}
           {task.status === "ready" && <p className="small"><a href="#review">Jump to review actions</a></p>}
         </section>
       )}
@@ -252,6 +258,11 @@ export function TaskDetailView({ id }: { id: string }) {
 
       {showResult && <ProductPreview key={`${task.id}-${task.revision}`} products={detail.products} sources={detail.sources} />}
       <ReviewPanel detail={detail} timeZone={tz} />
+      <ReplyPanel detail={detail} timeZone={tz} />
+      {drawer && (() => {
+        const art = detail.artifacts.find((a) => a.id === drawer.artifactId);
+        return art ? <FileDrawer key={art.id} artifact={art} product={detail.products.find((p) => p.id === art.productId)} sources={detail.sources} opener={drawer.opener} onClose={() => setDrawer(null)} /> : null;
+      })()}
 
       <section aria-label="Details" className="details-tabs">
         <Tabs

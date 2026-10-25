@@ -7,6 +7,8 @@ import {
 } from "@afterhours/contracts";
 import type { Db } from "./db";
 import { addEvent } from "./events";
+import { getGmailRow } from "./integrations";
+import { decideSender } from "./senderPolicy";
 import { getSettings, normalizeEmail } from "./settings";
 import { iso, newId } from "./util";
 
@@ -65,6 +67,10 @@ export function ingestMessage(db: Db, input: IngestInput, now: Date): IngestOutc
       )
       .get(input.sourceKey) as { id: string } | undefined;
     if (existing) return { kind: "task", taskId: existing.id, deduplicated: true };
+    // A task the user deleted from this email stays deleted: only its message key is remembered.
+    if (db.prepare("SELECT 1 FROM deleted_intake WHERE source_key = ?").get(input.sourceKey)) {
+      return { kind: "ignored", reason: "previously_deleted" };
+    }
 
     const settings = getSettings(db);
     const sender = normalizeEmail(envelope.from.email);
@@ -75,7 +81,7 @@ export function ingestMessage(db: Db, input: IngestInput, now: Date): IngestOutc
         auditIntake(db, "automation_disabled", safeRef, now);
         return { kind: "ignored", reason: "automation_disabled" };
       }
-      if (!settings.allowedSenders.map(normalizeEmail).includes(sender)) {
+      if (decideSender(settings, sender, getGmailRow(db)?.account) === "no") {
         auditIntake(db, "sender_not_allowed", safeRef, now);
         return { kind: "ignored", reason: "sender_not_allowed" };
       }

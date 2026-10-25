@@ -6,6 +6,8 @@ import type { AppConfig } from "./config";
 import { modelStatus, oauthRedirectProblem, whatsappConfigured } from "./config";
 import type { Db } from "./db";
 import { badRequest, notFound } from "./errors";
+import { hasSendScope } from "./gmail/api";
+import { getGmailTokens } from "./integrations";
 import { decodeCursor, encodeCursor, rowToNotification, whatsappPolicyProblem } from "./notifications";
 import { getSettings } from "./settings";
 import type { TaskRow } from "./tasks";
@@ -120,6 +122,10 @@ export function getArtifactForDownload(db: Db, id: string): (ArtifactRow & { rel
   return a ? { ...a, relPath: a.rel_path } : null;
 }
 
+function gmailCanSend(db: Db, config: AppConfig): boolean {
+  try { return hasSendScope(getGmailTokens(db, config.tokenEncryptionKey)?.scope); } catch { return false; }
+}
+
 export function getIntegrationStatus(db: Db, config: AppConfig, now: Date): IntegrationStatus {
   const g = db.prepare("SELECT * FROM integrations WHERE provider='gmail'").get() as
     | { state: "disconnected" | "connected" | "error"; account: string | null; connected_at: string | null; last_poll_at: string | null; last_error: string | null }
@@ -144,6 +150,7 @@ export function getIntegrationStatus(db: Db, config: AppConfig, now: Date): Inte
       connectedAt: g?.connected_at ?? null,
       lastPollAt: g?.last_poll_at ?? null,
       lastError: g?.last_error ?? (gmailState === "disconnected" ? setupProblem : null),
+      canSend: gmailState !== "disconnected" && gmailCanSend(db, config),
     },
     model: modelStatus(config),
     notifications: {

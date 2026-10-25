@@ -12,7 +12,7 @@ async function sha256Hex(blob: Blob): Promise<string | null> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-type State = { kind: "idle" } | { kind: "busy" } | { kind: "done"; name: string; size: number; checked: boolean } | { kind: "error"; message: string };
+export type State = { kind: "idle" } | { kind: "busy" } | { kind: "done"; name: string; size: number; checked: boolean } | { kind: "error"; message: string };
 
 /** Fetches the real file, checks it against the manifest (size, ZIP signature, checksum), then saves it. */
 async function downloadVerified(a: Artifact): Promise<{ name: string; size: number; checked: boolean }> {
@@ -38,11 +38,10 @@ async function downloadVerified(a: Artifact): Promise<{ name: string; size: numb
   return { name, size: blob.size, checked: digest !== null };
 }
 
-export function FileCard({ artifact, revision }: { artifact: Artifact; revision: number }) {
+/** Download state machine shared by the file card and the preview drawer. */
+export function useArtifactDownload(artifact: Artifact) {
   const toast = useToast();
   const [state, setState] = useState<State>({ kind: "idle" });
-  const Icon = artifact.format === "pptx" ? Presentation : FileText;
-
   async function start() {
     if (state.kind === "busy") return;
     setState({ kind: "busy" });
@@ -56,23 +55,57 @@ export function FileCard({ artifact, revision }: { artifact: Artifact; revision:
       toast.push("error", `Download failed: ${message}`);
     }
   }
+  return { state, start };
+}
 
+export function DownloadButton({ artifact, state, start, className = "btn btn-secondary" }: {
+  artifact: Artifact; state: State; start: () => void; className?: string;
+}) {
   return (
-    <div className="file-card">
+    <button type="button" className={className} onClick={start} disabled={state.kind === "busy"} aria-label={`${state.kind === "error" ? "Retry download of" : "Download"} ${artifact.filename}`}>
+      {state.kind === "busy" ? <><Loader2 size={16} className="spin" aria-hidden />Downloading…</> : <><Download size={16} aria-hidden />{state.kind === "error" ? "Retry download" : "Download"}</>}
+    </button>
+  );
+}
+
+export function DownloadStatus({ state }: { state: State }) {
+  return (
+    <>
+      {state.kind === "done" && (
+        <p className="small good" role="status"><CheckCircle2 size={14} aria-hidden /> Downloaded {state.name} ({formatBytes(state.size)}){state.checked ? ", checksum verified" : ""}.</p>
+      )}
+      {state.kind === "error" && (
+        <p className="small bad" role="alert"><TriangleAlert size={14} aria-hidden /> {state.message}</p>
+      )}
+    </>
+  );
+}
+
+export const artifactIcon = (artifact: Artifact) => (artifact.format === "pptx" ? Presentation : FileText);
+
+export function FileCard({ artifact, revision, onPreview, previewing = false }: {
+  artifact: Artifact; revision: number; onPreview?: (artifact: Artifact, opener: HTMLElement) => void; previewing?: boolean;
+}) {
+  const { state, start } = useArtifactDownload(artifact);
+  const Icon = artifactIcon(artifact);
+  const info = (
+    <>
       <Icon size={28} aria-hidden className="file-icon" />
-      <div className="file-info">
-        <p className="file-name wrap-anywhere">{artifact.filename}</p>
-        <p className="muted small">{artifact.format.toUpperCase()} · {formatBytes(artifact.sizeBytes)} · revision {revision}</p>
-        {state.kind === "done" && (
-          <p className="small good" role="status"><CheckCircle2 size={14} aria-hidden /> Downloaded {state.name} ({formatBytes(state.size)}){state.checked ? ", checksum verified" : ""}.</p>
-        )}
-        {state.kind === "error" && (
-          <p className="small bad" role="alert"><TriangleAlert size={14} aria-hidden /> {state.message}</p>
-        )}
+      <span className="file-info">
+        <span className="file-name wrap-anywhere">{artifact.filename}</span>
+        <span className="muted small block">{artifact.format.toUpperCase()} · {formatBytes(artifact.sizeBytes)} · revision {revision}{onPreview ? " · click to preview" : ""}</span>
+      </span>
+    </>
+  );
+  return (
+    <div className={`file-card${previewing ? " file-card-active" : ""}`}>
+      {onPreview ? (
+        <button type="button" className="file-open" aria-label={`Preview ${artifact.filename}`} aria-expanded={previewing} onClick={(e) => onPreview(artifact, e.currentTarget)}>{info}</button>
+      ) : <div className="file-open file-open-static">{info}</div>}
+      <div className="file-actions">
+        <DownloadStatus state={state} />
+        <DownloadButton artifact={artifact} state={state} start={start} />
       </div>
-      <button type="button" className="btn btn-secondary" onClick={start} disabled={state.kind === "busy"} aria-label={`${state.kind === "error" ? "Retry download of" : "Download"} ${artifact.filename}`}>
-        {state.kind === "busy" ? <><Loader2 size={16} className="spin" aria-hidden />Downloading…</> : <><Download size={16} aria-hidden />{state.kind === "error" ? "Retry download" : "Download"}</>}
-      </button>
     </div>
   );
 }

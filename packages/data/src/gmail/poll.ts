@@ -6,6 +6,7 @@ import {
   getGmailCheckpoint, getGmailRow, getGmailTokens, isCurrentGmailConnection, recordGmailPoll, updateGmailTokens,
   type GmailCheckpoint, type GmailTokens,
 } from "../integrations";
+import { decideSender, looksAutomated } from "../senderPolicy";
 import { getSettings, normalizeEmail } from "../settings";
 import type { GmailApi, GmailMessage } from "./api";
 import { headerValue, parseAddress, parseAddressList, parseGmailPayload } from "./mime";
@@ -71,6 +72,8 @@ export function describeGmailError(e: unknown): string {
 
 const toSec = (ms: number) => Math.max(0, Math.floor(ms / 1000));
 
+interface SenderCheck { settings: ReturnType<typeof getSettings>; account: string | null }
+
 /**
  * One bounded poll cycle. Safe to call repeatedly; dedupes by checkpoint overlap + DB uniqueness.
  *
@@ -132,7 +135,7 @@ export async function pollGmailOnce(deps: PollDeps): Promise<PollResult> {
     fetched.sort((a, b) => Number(a.internalDate) - Number(b.internalDate));
 
     const settings = getSettings(db);
-    const allowed = new Set(settings.allowedSenders.map(normalizeEmail));
+    const policy: SenderCheck = { settings, account: row.account };
     let afterMs = cp.afterMs;
     const newHandled = [...cp.handled];
 
@@ -144,7 +147,7 @@ export async function pollGmailOnce(deps: PollDeps): Promise<PollResult> {
         newHandled.push(msg.id);
         continue;
       }
-      const outcome = await ingestFromGmail(deps, api, row.id, msg, allowed);
+      const outcome = await ingestFromGmail(deps, api, row.id, msg, policy);
       if (outcome === "task") ingested++;
       else ignored++;
       newHandled.push(msg.id);
@@ -178,7 +181,7 @@ function dmarcFailed(msg: GmailMessage): boolean {
 }
 
 async function ingestFromGmail(
-  deps: PollDeps, api: GmailApi, integrationId: string, msg: GmailMessage, allowed: Set<string>,
+  deps: PollDeps, api: GmailApi, integrationId: string, msg: GmailMessage, policy: SenderCheck,
 ): Promise<"task" | "ignored"> {
   const { db, config } = deps;
   const safeRef = `gmail:${msg.id.slice(-24)}`;
@@ -195,11 +198,18 @@ async function ingestFromGmail(
   const sender = from ? normalizeEmail(from.email) : "";
 
   // Unknown senders and spoofed (DMARC-failed) mail: no attachment download, no task, no model call.
-  if (sender && allowed.has(sender) && dmarcFailed(msg)) {
+  const decision = sender ? decideSender(policy.settings, sender, policy.account) : "no";
+  if (decision !== "no" && dmarcFailed(msg)) {
     auditIntake(db, "sender_authentication_failed", safeRef, deps.now());
     return "ignored";
   }
-  const senderAllowed = !!sender && allowed.has(sender);
+  // Senders accepted only through the broader modes must be people: mailing lists, newsletters and auto-replies are
+  // skipped before any attachment is fetched. An address approved by name is never filtered this way.
+  if (decision !== "no" && decision !== "listed" && looksAutomated(sender, (n) => headerValue(msg.payload, n))) {
+    auditIntake(db, "automated_sender", safeRef, deps.now());
+    return "ignored";
+  }
+  const senderAllowed = decision !== "no";
   const attachments: IngestAttachment[] = [];
   let total = 0;
   if (senderAllowed) {

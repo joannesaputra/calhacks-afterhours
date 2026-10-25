@@ -86,6 +86,7 @@ export async function execute(inputValue: EngineInput, deps: EngineDependencies,
     await emit({ stage: "plan", message: `Requesting a bounded structured plan from the configured live model (${client.model}).` });
     // Engagement dates are calculated in code (pure, no model call); the model may restate them but not invent others.
     derivedDates = extractProposalFacts(input, sources).derivedDates;
+    if (metricsError) warnings.push(`The attached CSV could not be used for calculated figures (${metricsError.message}). Anything in the result that cites it comes only from the text of the file.`);
     const { result: live } = await generateLive(input, sources, { client, limits: options.limits, clock: options.clock, signal, emit, context: context(deadlines[0]?.dueAt ?? null, derivedDates), metricsError, deadline: deadlines.length === 1 ? deadlines[0]! : null });
     if (live.outcome === "skipped") return { outcome: "skipped", reason: live.reason, sources };
     plan = live.plan;

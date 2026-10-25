@@ -15,6 +15,7 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
 export const OUTPUT_LABEL: Record<OutputKind, string> = {
   proposal: "Proposal (DOCX)",
   report: "Report (DOCX)",
+  document: "Document (DOCX)",
   presentation: "Presentation (PPTX)",
 };
 

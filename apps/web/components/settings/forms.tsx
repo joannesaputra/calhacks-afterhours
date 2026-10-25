@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { X } from "lucide-react";
-import type { WorkspaceSettings } from "@afterhours/contracts";
+import { AlertTriangle, X } from "lucide-react";
+import { emailDomain, hasWorkDomain, type SenderPolicy, type WorkspaceSettings } from "@afterhours/contracts";
 import { describeError } from "@/lib/api";
 import { isValidTimeZone } from "@/lib/format";
 import { usePatchSettings } from "@/lib/hooks";
@@ -97,8 +97,21 @@ export function OrganizationForm({ settings }: { settings: WorkspaceSettings }) 
 }
 
 // ---------------- Automation ----------------
-export function AutomationForm({ settings }: { settings: WorkspaceSettings }) {
-  const server = { automationEnabled: settings.automationEnabled, autoPrepare: settings.autoPrepare, allowedSenders: settings.allowedSenders };
+const SENDER_POLICIES: { id: SenderPolicy; label: string; detail: (account: string | null) => string }[] = [
+  { id: "approved", label: "Approved senders only", detail: () => "Only the exact addresses listed below can start work. This is the safest choice." },
+  {
+    id: "same_domain", label: "My work domain",
+    detail: (account) => hasWorkDomain(account)
+      ? `Anyone at @${emailDomain(account!)} can start work, plus the addresses listed below. Subdomains do not count.`
+      : account
+        ? `${account} is a personal mailbox, not a work domain, so only that one address counts as "same", plus the addresses listed below. Connect a work mailbox to include colleagues.`
+        : "Connect Gmail first. Then anyone at the connected mailbox's work domain can start work, plus the addresses listed below.",
+  },
+  { id: "everyone", label: "Everyone", detail: () => "Any sender can start work. Newsletters, mailing lists and auto-replies are still skipped. Use this only on a mailbox you are happy to open to strangers." },
+];
+
+export function AutomationForm({ settings, account = null }: { settings: WorkspaceSettings; account?: string | null }) {
+  const server = { automationEnabled: settings.automationEnabled, autoPrepare: settings.autoPrepare, senderPolicy: settings.senderPolicy, allowedSenders: settings.allowedSenders };
   const { draft, setDraft, dirty } = useDraft(server);
   const save = useSave();
   const [input, setInput] = useState("");
@@ -120,8 +133,12 @@ export function AutomationForm({ settings }: { settings: WorkspaceSettings }) {
   return (
     <SettingsSection
       id="auto" title="Automation" dirty={dirty} save={save.state}
-      description="Only exact addresses on this list can start work automatically. Mail from anyone else is not processed."
-      onSubmit={() => save.run({ automationEnabled: draft.automationEnabled, autoPrepare: draft.autoPrepare, allowedSenders: draft.allowedSenders })}
+      description={draft.senderPolicy === "everyone"
+        ? "Mail from any sender can start work. Listed addresses are always accepted."
+        : draft.senderPolicy === "same_domain"
+          ? "Mail from your work domain and from listed addresses can start work. Mail from anyone else is not processed."
+          : "Only exact addresses on this list can start work automatically. Mail from anyone else is not processed."}
+      onSubmit={() => save.run({ automationEnabled: draft.automationEnabled, autoPrepare: draft.autoPrepare, senderPolicy: draft.senderPolicy, allowedSenders: draft.allowedSenders })}
     >
       <label className="switch">
         <input type="checkbox" role="switch" checked={draft.automationEnabled} onChange={(e) => { save.touch(); setDraft((d) => ({ ...d, automationEnabled: e.target.checked })); }} />
@@ -129,9 +146,29 @@ export function AutomationForm({ settings }: { settings: WorkspaceSettings }) {
       </label>
       <label className="switch">
         <input type="checkbox" role="switch" checked={draft.autoPrepare} onChange={(e) => { save.touch(); setDraft((d) => ({ ...d, autoPrepare: e.target.checked })); }} />
-        <span><strong>Prepare work automatically</strong><span className="muted small block">Start preparing as soon as an approved sender’s request arrives. Preparing never sends anything. When off, those requests are skipped and are not kept to prepare later.</span></span>
+        <span><strong>Prepare work automatically</strong><span className="muted small block">Start preparing as soon as an allowed sender’s request arrives. Preparing never sends anything. When off, those requests are skipped and are not kept to prepare later.</span></span>
       </label>
-      <Field id="sender-input" label="Approved senders" error={inputError} hint="Exact addresses only. They are lower-cased.">
+      <fieldset className="field" aria-describedby="sender-policy-hint">
+        <legend>Who can start work</legend>
+        <p className="muted small" id="sender-policy-hint">Choose whose email AfterHours may turn into work. Everything it prepares is still a draft for you to review.</p>
+        <div role="radiogroup" aria-label="Who can start work" className="stack-sm">
+          {SENDER_POLICIES.map((o) => (
+            <label key={o.id} className="card card-flat option" htmlFor={`policy-${o.id}`}>
+              <span>
+                <input
+                  type="radio" id={`policy-${o.id}`} name="sender-policy" value={o.id} checked={draft.senderPolicy === o.id}
+                  onChange={() => { save.touch(); setDraft((d) => ({ ...d, senderPolicy: o.id })); }}
+                /> <strong>{o.label}</strong>
+              </span>
+              <span className="muted small wrap-anywhere">{o.detail(account)}</span>
+            </label>
+          ))}
+        </div>
+        {draft.senderPolicy === "everyone" && (
+          <p className="callout callout-warn" role="note"><AlertTriangle size={16} aria-hidden /> Anyone who emails this mailbox can start a task, which may use your model quota and read attachments they send. Mail is still treated as data, never as instructions, and nothing is sent without your review.</p>
+        )}
+      </fieldset>
+      <Field id="sender-input" label={draft.senderPolicy === "approved" ? "Approved senders" : "Always-approved senders"} error={inputError} hint="Exact addresses only. They are lower-cased and accepted in every mode.">
         <div className="add-row">
           <input
             id="sender-input" type="email" inputMode="email" autoComplete="off" value={input} placeholder="client@example.com"
@@ -143,7 +180,7 @@ export function AutomationForm({ settings }: { settings: WorkspaceSettings }) {
         </div>
       </Field>
       {draft.allowedSenders.length === 0 ? (
-        <p className="callout callout-info">No approved senders. Nothing will be prepared automatically until you add one.</p>
+        <p className="callout callout-info">{draft.senderPolicy === "approved" ? "No approved senders. Nothing will be prepared automatically until you add one." : "No addresses listed. Senders are accepted by the choice above."}</p>
       ) : (
         <ul className="chips-list" aria-label="Approved senders">
           {draft.allowedSenders.map((s) => (

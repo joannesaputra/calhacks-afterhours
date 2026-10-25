@@ -9,7 +9,8 @@
 
 AfterHours watches a connected Gmail inbox. When an authorized sender asks for supported work, it prepares real
 downloadable deliverables (DOCX proposal/report, PPTX deck) and puts them in a review queue. "Mark reviewed" only
-records acceptance — it never sends anything.
+records acceptance — it never sends anything. Separately, and only if you allow it in Settings, a reviewed task can be
+emailed back to the person who asked with an explicit Send click (see the runbook).
 
 The canonical team contract is [docs/CONTRACT.md](docs/CONTRACT.md). Ownership, routes, types and env names there
 are frozen; propose changes in [docs/contract-change-requests.md](docs/contract-change-requests.md).

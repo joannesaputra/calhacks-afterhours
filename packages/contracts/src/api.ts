@@ -2,6 +2,7 @@
 import { z } from "zod";
 import {
   OrganizationProfileSchema,
+  SenderPolicySchema,
   TaskStatusSchema,
   WorkAnswerSchema,
 } from "./domain";
@@ -53,6 +54,7 @@ export const SettingsPatchSchema = z
       .partial()
       .strict(),
     automationEnabled: z.boolean(),
+    senderPolicy: SenderPolicySchema,
     allowedSenders: z.array(z.string().min(3).max(320)).max(50),
     autoPrepare: z.boolean(),
     notifications: z
@@ -85,3 +87,36 @@ export const DemoInjectResultSchema = z.object({
   taskId: z.string(),
   deduplicated: z.boolean(),
 });
+
+/** Send the reviewed files back to the person who asked. The recipient is never part of the body: it is the original sender. */
+export const ReplySendBodySchema = z.object({
+  revision: z.number().int().positive(),
+  body: z.string().trim().min(1).max(5000),
+  artifactIds: z.array(z.string().min(1).max(128)).min(1).max(10),
+  /** Needed only when an earlier attempt's outcome is unknown (it never finished); the user confirms it may have gone out. */
+  confirmResend: z.boolean().optional(),
+});
+export type ReplySendBody = z.infer<typeof ReplySendBodySchema>;
+
+export const ReplyViewSchema = z.object({
+  taskId: z.string(),
+  revision: z.number().int().positive(),
+  available: z.boolean(),
+  reason: z.string().nullable(),
+  needsSendPermission: z.boolean(),
+  from: z.string().nullable(),
+  to: z.string(),
+  subject: z.string(),
+  defaultBody: z.string(),
+  attachments: z.array(z.object({ id: z.string(), filename: z.string(), sizeBytes: z.number().int().nonnegative() })),
+  last: z.object({
+    id: z.string(),
+    status: z.enum(["sending", "sent", "failed"]),
+    to: z.string(),
+    at: z.string(),
+    error: z.string().nullable(),
+    /** A "sending" attempt that never finished: the outcome is unknown and the Sent folder is the source of truth. */
+    uncertain: z.boolean(),
+  }).nullable(),
+});
+export type ReplyView = z.infer<typeof ReplyViewSchema>;

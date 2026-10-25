@@ -1,5 +1,5 @@
 // Test helpers shared by data/api/worker tests. Not imported by production code.
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { zipSync, strToU8 } from "fflate";
@@ -9,7 +9,11 @@ import type {
 import { bootstrapDb } from "./bootstrap";
 import { findRepoRoot, loadConfig, type AppConfig } from "./config";
 import type { Db } from "./db";
-import { MIME_BY_FORMAT } from "./artifacts";
+import { MIME_BY_FORMAT, sha256Bytes } from "./artifacts";
+import { GMAIL_SEND_SCOPE } from "./gmail/api";
+import { ingestMessage } from "./ingest";
+import { getGmailRow, saveGmailConnection } from "./integrations";
+import { patchSettings } from "./settings";
 
 export function makeTestConfig(overrides: Record<string, string> = {}): AppConfig {
   const dir = mkdtempSync(path.join(tmpdir(), "afterhours-test-"));
@@ -108,3 +112,51 @@ export function runToReady(db: Db, config: AppConfig, key: string, now: Date): {
 }
 
 export * from "./context/testing";
+
+export interface SeededReply { taskId: string; revision: number; artifactIds: string[]; sender: string }
+
+/**
+ * A reviewed (approved) Gmail task with real stored files, ready for the reply tests. Synthetic data only: the
+ * sender is a reserved example address and the files are tiny Office containers.
+ */
+export function seedApprovedReply(
+  db: Db, config: AppConfig, opts: { scope?: string | null; mode?: "gmail" | "demo"; status?: string; sender?: string; subject?: string; connect?: boolean; key?: string } = {},
+): SeededReply {
+  const now = new Date("2026-03-02T20:00:00Z");
+  const sender = opts.sender ?? "jordan@client.example";
+  if (opts.connect !== false) {
+    saveGmailConnection(db, config.tokenEncryptionKey, {
+      account: "me@acme.example",
+      tokens: { access_token: "a", refresh_token: "r", scope: opts.scope === undefined ? GMAIL_SEND_SCOPE : opts.scope },
+    }, now);
+  }
+  const integrationId = getGmailRow(db)?.id ?? null;
+  const mode = opts.mode ?? "gmail";
+  patchSettings(db, { allowedSenders: [sender] }, now);
+  const out = ingestMessage(db, {
+    sourceKey: `${mode}:${integrationId ?? "demo"}:reply-seed-${opts.key ?? "1"}`, mode, integrationId: mode === "gmail" ? integrationId : null,
+    envelope: {
+      providerMessageId: "msg-1", providerThreadId: "thr-1", from: { name: "Jordan Lee", email: sender }, to: ["me@acme.example"],
+      subject: opts.subject ?? "Please prepare the proposal", receivedAt: now.toISOString(), bodyText: "Please prepare the proposal.", attachments: [],
+    },
+    attachments: [], generationMode: "fixture", fixtureScenario: null,
+  }, now);
+  if (out.kind !== "task") throw new Error(`seed ingest failed: ${out.kind}`);
+  const revision = 1;
+  const artifactIds: string[] = [];
+  for (const [i, format] of (["docx", "pptx"] as const).entries()) {
+    const bytes = officeBytes(format, `seed${i}`);
+    const rel = `${out.taskId}/r${revision}/seed-${format}.${format}`;
+    mkdirSync(path.dirname(path.join(config.artifactsDir, rel)), { recursive: true });
+    writeFileSync(path.join(config.artifactsDir, rel), bytes);
+    const id = `art_seed_${format}`;
+    db.prepare(
+      "INSERT INTO artifacts (id, task_id, revision, product_id, format, rel_path, filename, mime_type, size_bytes, sha256, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    ).run(id, out.taskId, revision, "prod-1", format, rel, `Proposal.${format}`, format === "docx"
+      ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      : "application/vnd.openxmlformats-officedocument.presentationml.presentation", bytes.byteLength, sha256Bytes(bytes), now.toISOString());
+    artifactIds.push(id);
+  }
+  db.prepare("UPDATE tasks SET status=? WHERE id=?").run(opts.status ?? "approved", out.taskId);
+  return { taskId: out.taskId, revision, artifactIds, sender };
+}

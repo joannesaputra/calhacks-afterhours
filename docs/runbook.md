@@ -60,10 +60,66 @@ disagree). Never stop a process you did not start. Reloading a task page always 
 - **Prepare work automatically off:** polling still runs, and each approved sender's message is recorded as ignored
   (`auto_prepare_disabled`) and checkpointed. It is **not** held for later and is not prepared after turning the switch
   back on. It is not a review queue.
+- **Who can start work** (`senderPolicy`, Settings → Automation) has three values. `approved` (the default, and the value
+  for any settings saved before the option existed): only the exact addresses in the list. `same_domain`: the list plus
+  anyone at the connected mailbox's own domain (exact match; subdomains and lookalike domains do not count). On a personal
+  mailbox such as gmail.com, "same domain" means only that one address, never the whole provider. `everyone`: any sender.
+  Addresses on the list are accepted in every mode. In `same_domain` and `everyone`, mail is also skipped when it looks
+  automatic (no-reply sender, `List-Id`/`List-Unsubscribe`, `Auto-Submitted`, `Precedence: bulk`; audit reason
+  `automated_sender`) or fails DMARC. An address approved by name is never skipped as automated. Automation off and
+  Prepare work automatically off apply in every mode. `everyone` lets strangers use model quota and send attachments, so
+  keep it for a mailbox you are willing to open that far.
 - Google's `gmail.readonly` permission covers the whole mailbox. AfterHours lists only new inbox mail after connecting,
-  fetches each listed message to check its sender, and creates work only for exact approved senders. Google does not
+  fetches each listed message to check its sender, and creates work only for senders the policy accepts. Google does not
   restrict the grant to those senders.
 - Generation mode and organization profile are snapshotted when a task is ingested.
+
+### Sending the result back (opt-in)
+
+Marking a task reviewed only records acceptance and sends nothing. A separate **Send back to the sender** panel appears on
+a reviewed task and emails the prepared files to the person who asked.
+
+- **Permission is separate.** Connecting Gmail asks only for `gmail.readonly`. Settings → Gmail → **Allow sending replies**
+  restarts Google consent with `gmail.send` added (send mail from this account; no modify or delete). Until it is granted
+  the panel says why it cannot send. In Google's Testing mode the account must be a test user; Google may also require the
+  scope to be listed under Data access for the OAuth client.
+- **What it sends.** One message, to the original sender's address read from the stored task (the request cannot supply a
+  recipient, cc or bcc), in the original thread when Google lets us read its Message-ID. The user sees and may edit the
+  message text and may untick files in a confirmation dialog first. Header values are stripped of line breaks and file
+  names of path and quote characters.
+- **Once only.** `reply_sends` (migration 005) records each attempt before anything leaves; a partial unique index allows
+  one live or completed send per task revision, so a double click or two tabs cannot send twice. A refusal from Google is
+  recorded as failed and may be retried. No answer from Google (timeout) leaves the attempt as "sending": the panel warns
+  and asks the user to check the Sent folder and confirm before sending again.
+- **Not available** for demo tasks (there is nobody to reply to), unreviewed or dismissed tasks, a disconnected mailbox, or a
+  task whose files fail their stored checksum. Message text and file bytes are not stored in `reply_sends`.
+- **File preview.** Clicking a file card opens a side panel showing the structured content that file was built from (the
+  same view as the content preview), with a Download button; it is not a Word or PowerPoint rendering.
+- Not verified: a real send to a real mailbox. Tests use a Gmail double; no message was sent anywhere.
+
+### What gets made, and when it asks first (live mode)
+
+In live mode (`GENERATION_MODE=live`) the model prepares whatever the email asks for, with or without attachments: a proposal,
+a report from supplied data, a slide deck, or any other written work (kind `document`: memo, plan, brief, summary, checklist,
+letter or email draft). It acts first. Anything merely unspecified (audience, length, tone, structure) is decided with a sensible
+default and listed under the plan's assumptions. It asks a follow-up only when the request is so ambiguous that any result would
+probably be wrong, or when the work would need an invented fact such as an authorized fee, and then at most three questions.
+It skips only a message that clearly asks for nothing (newsletter, automatic notice). Attachments are optional source material:
+text, Markdown, CSV, Word and PowerPoint files are read; a file that cannot be read (for example a PDF) is flagged and the work
+is still made from the request. A CSV that is not the sales layout is treated as plain text, with a warning, and never fails
+the task. Invented numbers, dates, prices and quotes are still rejected by the grounding checks. **Fixture mode is a canned
+test double** that only knows the sample proposal and sales-report shapes (a report needs a sales CSV of exactly two months),
+so use live mode for real requests. A task keeps the generation mode it was created in; delete and resend to use live mode.
+
+### Deleting a task
+
+**Delete task** (task page, top right) permanently removes a task after a confirmation dialog: the request, plan, products,
+files on disk, answers, retrieval runs, reply records and activity log, plus the stored email text. It is refused while the
+task is queued, planning or running (delete it once it settles). Nothing is deleted from Gmail, and a reply that was already
+sent stays in the Sent folder. For mailbox tasks a tombstone (`deleted_intake`, migration 006) keeps only the provider's
+message key, with no sender, subject, text or files, so the poller never re-creates the task from the same email; demo
+tasks leave no tombstone. Copies of email history made under a grant are managed by that grant's purge, not by deleting a
+task. There is no undo and no trash; use **Dismiss** to close a task and keep its record.
 
 ### Controlled Gmail intake check (no model calls)
 

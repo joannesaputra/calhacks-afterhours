@@ -4,8 +4,13 @@ import type { AppConfig } from "../config";
 import type { GmailTokens } from "../integrations";
 import type { GmailPart } from "./mime";
 
-/** Minimum scope. Never request modify/compose/send for this MVP. */
+/** Minimum scope: read only. Connecting never asks for more than this. */
 export const GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"] as const;
+/** Added only when the user chooses "Allow sending replies": send mail from this account, nothing else (no modify or delete). */
+export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+
+/** True when a stored token's granted scopes include permission to send. */
+export const hasSendScope = (scope: string | null | undefined): boolean => (scope ?? "").split(/\s+/).includes(GMAIL_SEND_SCOPE);
 
 export interface GmailMessage {
   id: string;
@@ -26,6 +31,8 @@ export interface GmailApi {
    * without it simply cannot back up history, and the context layer reports that instead of pretending.
    */
   listMessages?(query: string, pageToken: string | undefined, max: number): Promise<{ ids: string[]; nextPageToken: string | null }>;
+  /** Send one RFC 822 message (optionally into an existing thread). Optional: test doubles and read-only clients omit it. */
+  sendMessage?(raw: Buffer, threadId: string | null): Promise<{ id: string; threadId: string | null }>;
 }
 
 export class GmailConfigError extends Error {}
@@ -38,11 +45,11 @@ export function buildOAuthClient(config: Pick<AppConfig, "google">): OAuth2Clien
   return new OAuth2Client(clientId, clientSecret, redirectUri);
 }
 
-export function authUrl(client: OAuth2Client, state: string): string {
+export function authUrl(client: OAuth2Client, state: string, opts: { send?: boolean } = {}): string {
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: [...GMAIL_SCOPES],
+    scope: opts.send ? [...GMAIL_SCOPES, GMAIL_SEND_SCOPE] : [...GMAIL_SCOPES],
     state,
     include_granted_scopes: false,
   });
@@ -103,6 +110,11 @@ export function createGmailApi(client: OAuth2Client): GmailApi {
     async getAttachment(messageId, attachmentId) {
       const r = await g.users.messages.attachments.get({ userId: "me", messageId, id: attachmentId });
       return Buffer.from(r.data.data ?? "", "base64url");
+    },
+    async sendMessage(raw, threadId) {
+      const r = await g.users.messages.send({ userId: "me", requestBody: { raw: raw.toString("base64url"), ...(threadId ? { threadId } : {}) } });
+      if (!r.data.id) throw new Error("Gmail did not return a message id");
+      return { id: r.data.id, threadId: r.data.threadId ?? null };
     },
   };
 }

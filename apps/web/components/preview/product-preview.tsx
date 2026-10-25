@@ -6,7 +6,7 @@ import { PreviewContext } from "./context";
 import { BlockView } from "./blocks";
 import { SourceDialog } from "./source-dialog";
 
-const KIND_LABEL = { proposal: "Proposal", report: "Report", presentation: "Presentation" } as const;
+export const KIND_LABEL = { proposal: "Proposal", report: "Report", presentation: "Presentation", document: "Document" } as const;
 
 function DocumentPage({ product }: { product: WorkProduct }) {
   return (
@@ -66,7 +66,7 @@ function SlideDeck({ product }: { product: WorkProduct }) {
   );
 }
 
-function ProductBody({ product }: { product: WorkProduct }) {
+export function ProductBody({ product }: { product: WorkProduct }) {
   return (
     <div>
       {product.warnings.length > 0 && (

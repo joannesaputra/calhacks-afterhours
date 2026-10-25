@@ -20,6 +20,7 @@ export const defaultSettings = (
 ): WorkspaceSettings => ({
   organization,
   automationEnabled: true,
+  senderPolicy: "approved",
   allowedSenders: [],
   autoPrepare: true,
   notifications: {
@@ -96,6 +97,7 @@ export function patchSettings(db: Db, patch: SettingsPatch, now: Date): Workspac
   }
   if (patch.automationEnabled !== undefined) next.automationEnabled = patch.automationEnabled;
   if (patch.autoPrepare !== undefined) next.autoPrepare = patch.autoPrepare;
+  if (patch.senderPolicy !== undefined) next.senderPolicy = patch.senderPolicy;
   if (patch.allowedSenders) {
     const list = [...new Set(patch.allowedSenders.map(normalizeEmail))];
     const bad = list.find((e) => !EMAIL_RE.test(e) || e.includes("*"));

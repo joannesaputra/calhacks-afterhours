@@ -31,9 +31,17 @@ export function GmailSection({ status, timeZone }: { status: IntegrationStatus["
             <dt>Last checked</dt><dd>{formatDateTime(status.lastPollAt, timeZone, true)}</dd>
           </dl>
           {status.lastError && <p className="callout callout-warn" role="note"><AlertTriangle size={16} aria-hidden /> {status.lastError}</p>}
-          <p className="muted small">Google’s read-only permission covers the whole mailbox; it cannot send, change or delete mail. AfterHours reads only new inbox messages that arrive after connecting, checks each sender, and prepares work only for approved senders. Older mail is not imported unless you allow email history below.</p>
+          <p className="muted small">By default Google’s read-only permission covers the whole mailbox and cannot send, change or delete mail. AfterHours reads only new inbox messages that arrive after connecting, checks each sender, and prepares work only for senders you allow. Older mail is not imported unless you allow email history below.</p>
+          {state === "connected" && (
+            status.canSend ? (
+              <p className="small good" role="status"><CheckCircle2 size={14} aria-hidden /> Sending replies is allowed. A reply is only ever sent when you click Send on a reviewed task, to the person who asked.</p>
+            ) : (
+              <p className="muted small">Optional: allow AfterHours to email the reviewed files back to the person who asked. Google asks for a separate permission to send mail; it does not allow changing or deleting mail, and nothing is sent unless you click Send on a reviewed task.</p>
+            )
+          )}
           <div className="actions">
             <a className="btn btn-secondary" href="/api/integrations/gmail/start">{state === "connected" ? "Reconnect Gmail" : "Connect Gmail"}</a>
+            {state === "connected" && !status.canSend && <a className="btn btn-secondary" href="/api/integrations/gmail/start?send=1">Allow sending replies</a>}
             {state !== "disconnected" && !confirming && <button type="button" className="btn btn-ghost" onClick={() => setConfirming(true)}>Disconnect</button>}
             {confirming && (
               <span className="inline-confirm" role="group" aria-label="Confirm disconnect">

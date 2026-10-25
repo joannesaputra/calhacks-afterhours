@@ -674,3 +674,16 @@ All additions are optional or new; existing producers and consumers keep working
   `GET /v1/context/folders`, `GET /v1/context/emails/:id`, `GET /v1/context/files/:versionId/download`,
   `GET /v1/tasks/:id/context`, `POST /v1/tasks/:id/context/corrections`.
 - State machine: a context correction may move a `ready` task to `queued` as a new revision.
+- `WorkspaceSettings.senderPolicy: "approved" | "same_domain" | "everyone"` (default `approved`, also applied when parsing
+  settings stored without it) and the matching optional `SettingsPatch.senderPolicy`. `allowedSenders` stays exact
+  addresses and is accepted in every mode. Intake audit gains the reason `automated_sender`.
+- `IntegrationStatus.gmail.canSend: boolean` (the stored grant includes `gmail.send`). `GET /v1/integrations/gmail/start?send=1`
+  requests `gmail.readonly` plus `gmail.send`; without it only `gmail.readonly` is requested.
+- `GET /v1/tasks/:id/reply` returns a `ReplyView` (who it would go to, files, why not available). `POST /v1/tasks/:id/reply`
+  with `{ revision, body, artifactIds, confirmResend? }` sends once to the original sender. Errors: `REPLY_NOT_AVAILABLE`,
+  `SEND_PERMISSION_MISSING`, `ALREADY_SENT`, `SEND_IN_PROGRESS`, `SEND_OUTCOME_UNKNOWN`, `SEND_FAILED`, `ARTIFACT_MISMATCH`.
+- Migration `005_reply_send.sql` adds `reply_sends`.
+- `DELETE /v1/tasks/:id` permanently deletes a task and its files; returns `{ deleted: true, files }`. `409 TASK_ACTIVE` while
+  queued, planning or running. Intake audit gains `task_deleted` and the ingest outcome `ignored: previously_deleted`.
+  Migration `006_task_delete.sql` adds `deleted_intake` (message key and time only).
+- `OutputKind` gains `"document"` (any written work that is not a proposal, report or deck; produced as DOCX). Existing values are unchanged.

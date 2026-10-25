@@ -11,7 +11,7 @@ export const TaskStatusSchema = z.enum([
 ]);
 export type TaskStatus = z.infer<typeof TaskStatusSchema>;
 
-export const OutputKindSchema = z.enum(["proposal", "report", "presentation"]);
+export const OutputKindSchema = z.enum(["proposal", "report", "presentation", "document"]);
 export type OutputKind = z.infer<typeof OutputKindSchema>;
 
 export const ArtifactFormatSchema = z.enum(["docx", "pptx"]);
@@ -225,9 +225,38 @@ export type TaskDetail = z.infer<typeof TaskDetailSchema>;
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:mm");
 
+/**
+ * Who may start work from Gmail. `approved`: only the exact addresses in allowedSenders. `same_domain`: those plus
+ * anyone at the connected mailbox's own work domain. `everyone`: any sender. Addresses on the list are always accepted.
+ */
+export const SenderPolicySchema = z.enum(["approved", "same_domain", "everyone"]);
+export type SenderPolicy = z.infer<typeof SenderPolicySchema>;
+
+/**
+ * Mailbox providers whose domain is shared by millions of unrelated people. "Same work domain" must never mean
+ * "everyone on gmail.com", so for these only the connected address itself counts as the same domain.
+ */
+export const PUBLIC_MAIL_DOMAINS: ReadonlySet<string> = new Set([
+  "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "msn.com", "yahoo.com", "ymail.com",
+  "icloud.com", "me.com", "mac.com", "aol.com", "proton.me", "protonmail.com", "pm.me", "gmx.com", "gmx.net",
+  "mail.com", "zoho.com", "yandex.com", "fastmail.com", "hey.com",
+]);
+
+export const emailDomain = (email: string): string => {
+  const e = email.trim().toLowerCase();
+  return e.slice(e.lastIndexOf("@") + 1);
+};
+
+/** True when the address is on a domain that identifies one organization (not a public mailbox provider). */
+export function hasWorkDomain(account: string | null | undefined): boolean {
+  const a = (account ?? "").trim().toLowerCase();
+  return a.includes("@") && !PUBLIC_MAIL_DOMAINS.has(emailDomain(a));
+}
+
 export const WorkspaceSettingsSchema = z.object({
   organization: OrganizationProfileSchema,
   automationEnabled: z.boolean(),
+  senderPolicy: SenderPolicySchema.default("approved"),
   allowedSenders: z.array(z.string()),
   autoPrepare: z.boolean(),
   notifications: z.object({
@@ -251,6 +280,8 @@ export const IntegrationStatusSchema = z.object({
     connectedAt: isoTime.nullable(),
     lastPollAt: isoTime.nullable(),
     lastError: z.string().nullable(),
+    /** The stored Google grant includes permission to send mail (the separate "Allow sending replies" consent). */
+    canSend: z.boolean().default(false),
   }),
   model: z.object({
     mode: GenerationModeSchema,

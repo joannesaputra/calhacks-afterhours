@@ -33,7 +33,10 @@ export function SettingsView() {
   useEffect(() => {
     const marker = params.get("gmail");
     if (!marker) return;
-    if (marker === "connected") setNotice({ ok: true, text: "Gmail connected. New messages from approved senders will be prepared." });
+    if (marker === "connected") {
+      const send = params.get("send") === "1";
+      setNotice({ ok: true, text: send ? "Gmail connected, and sending replies is allowed. New messages from allowed senders will be prepared; nothing is sent unless you click Send on a reviewed task." : "Gmail connected. New messages from allowed senders will be prepared." });
+    }
     else {
       const reason = params.get("reason") ?? "";
       setNotice({ ok: false, text: GMAIL_REASONS[reason] ?? "Gmail could not be connected. Try again." });
@@ -61,7 +64,7 @@ export function SettingsView() {
       {settings.isError && <ErrorPanel error={settings.error} title="Could not load settings" onRetry={() => void settings.refetch()} />}
       <div className="stack">
         {settings.data && <OrganizationForm settings={settings.data} />}
-        {settings.data && <AutomationForm settings={settings.data} />}
+        {settings.data && <AutomationForm settings={settings.data} account={integrations?.gmail.email ?? null} />}
         <GmailSection status={integrations?.gmail} timeZone={tz} />
         <ContextAccessSection timeZone={tz} />
         <ModelAndWorkerSection status={integrations} timeZone={tz} />

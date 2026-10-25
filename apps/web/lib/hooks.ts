@@ -8,7 +8,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import type { ContextCorrectionBody, CreateGrantBody, SettingsPatch, TaskDetail, TaskSummary, WorkAnswer } from "@afterhours/contracts";
+import type { ContextCorrectionBody, CreateGrantBody, ReplySendBody, SettingsPatch, TaskDetail, TaskSummary, WorkAnswer } from "@afterhours/contracts";
 import { api } from "./api";
 import { isActive } from "./labels";
 
@@ -21,6 +21,7 @@ export const keys = {
   integrations: ["integrations"] as const,
   context: ["context"] as const,
   taskContext: (id: string) => ["task-context", id] as const,
+  reply: (id: string) => ["reply", id] as const,
 };
 
 const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
@@ -199,4 +200,33 @@ export function useContextGrants() {
     revoke: useMutation({ mutationFn: (id: string) => api.revokeGrant(id), onSuccess: done }),
     purge: useMutation({ mutationFn: (id: string) => api.purgeGrant(id), onSuccess: done }),
   };
+}
+
+/** The reply panel for a reviewed task: who it goes to, what is attached, and why it cannot be sent when it cannot. */
+export function useReply(id: string, enabled: boolean) {
+  return useQuery({ enabled, queryKey: keys.reply(id), queryFn: ({ signal }) => api.reply(id, signal), retry: false });
+}
+
+export function useSendReply(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ReplySendBody) => api.sendReply(id, body),
+    // Re-read both: the panel shows the outcome, and the task's activity log gains the "Reply sent" entry.
+    onSettled: () => { void qc.invalidateQueries({ queryKey: keys.reply(id) }); refreshTask(qc, id); },
+  });
+}
+
+/** Permanently delete a task. The task is removed from every cached list so it cannot flash back before the next refresh. */
+export function useDeleteTask(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.deleteTask(id),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: keys.task(id) });
+      qc.removeQueries({ queryKey: keys.taskContext(id) });
+      qc.removeQueries({ queryKey: keys.reply(id) });
+      void qc.invalidateQueries({ queryKey: keys.tasks });
+      void qc.invalidateQueries({ queryKey: keys.notifications });
+    },
+  });
 }

@@ -2,13 +2,13 @@ import type { FastifyInstance } from "fastify";
 import {
   GmailConfigError, authUrl, buildOAuthClient, clientWithTokens, consumeOauthState, createGmailApi, createOauthState,
   disconnectGmail, exchangeCode, getGmailTokens, getIntegrationStatus, lookupSession, oauthRedirectProblem,
-  saveGmailConnection, DomainError, GMAIL_SCOPES, reflectGmailIntegration, OWNER_ID, type GmailTokens,
+  saveGmailConnection, DomainError, GMAIL_SCOPES, hasSendScope, reflectGmailIntegration, OWNER_ID, type GmailTokens,
 } from "@afterhours/data";
 import type { Ctx } from "../app";
 
 /** Injectable Google boundary so OAuth flow is testable without Google. */
 export interface GmailOAuthPort {
-  authUrl(state: string): string;
+  authUrl(state: string, opts?: { send?: boolean }): string;
   exchange(code: string): Promise<GmailTokens>;
   profileEmail(tokens: GmailTokens): Promise<string>;
   revoke(tokens: GmailTokens): Promise<void>;
@@ -16,7 +16,7 @@ export interface GmailOAuthPort {
 
 export function googleOAuthPort(ctx: Ctx): GmailOAuthPort {
   return {
-    authUrl: (state) => authUrl(buildOAuthClient(ctx.config), state),
+    authUrl: (state, opts) => authUrl(buildOAuthClient(ctx.config), state, opts),
     exchange: (code) => exchangeCode(buildOAuthClient(ctx.config), code),
     async profileEmail(tokens) {
       return createGmailApi(clientWithTokens(ctx.config, tokens)).getProfileEmail();
@@ -55,7 +55,8 @@ export function registerIntegrationRoutes(app: FastifyInstance, ctx: Ctx, inject
     let url: string;
     const state = createOauthState(ctx.db, req.sessionId!, ctx.now());
     try {
-      url = port.authUrl(state);
+      // Reading is the default. Sending is a separate, explicit choice (?send=1) that asks Google for one more permission.
+      url = port.authUrl(state, { send: (req.query as { send?: string }).send === "1" });
     } catch (e) {
       if (e instanceof GmailConfigError) {
         throw new DomainError("GMAIL_NOT_CONFIGURED", e.message, 503);
@@ -87,7 +88,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, ctx: Ctx, inject
       const email = await port.profileEmail(tokens);
       saveGmailConnection(ctx.db, ctx.config.tokenEncryptionKey, { account: email, tokens }, ctx.now());
       reflectGmailIntegration(ctx.db, OWNER_ID, ctx.now());
-      return reply.redirect(back("connected"));
+      return reply.redirect(back(hasSendScope(tokens.scope) ? "connected&send=1" : "connected"));
     } catch (e) {
       req.log.warn({ errName: e instanceof Error ? e.name : "unknown" }, "gmail oauth exchange failed");
       return reply.redirect(back("error&reason=exchange_failed"));

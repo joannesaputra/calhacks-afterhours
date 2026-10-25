@@ -1,6 +1,7 @@
 import type { EngineInput, SourceDocument } from "@afterhours/contracts";
 import { abortIfNeeded, EngineError } from "./errors";
 import { stableId } from "./ids";
+import { extractDocument } from "./ooxml/extract";
 
 const MAX_FILE = 10 * 1024 * 1024;
 const MAX_TOTAL = 20 * 1024 * 1024;
@@ -46,7 +47,15 @@ export function buildSources(input: EngineInput, signal: AbortSignal): { sources
     if (file.bytes.byteLength > MAX_FILE) throw new EngineError("INPUT_LIMIT", `${meta.filename} exceeds the 10 MB file limit.`, false);
     const supported = meta.mimeType.startsWith("text/") || /\.(txt|md|csv)$/i.test(meta.filename);
     if (!supported) {
-      sources.push({ ...sourceBase, text: "", extractionStatus: "unsupported", warnings: [`${meta.mimeType} extraction is not supported in this release.`] });
+      // Word and PowerPoint files are read by the same extractor used for revisions; anything else is reported, never guessed at.
+      const read = extractDocument({ bytes: file.bytes, filename: meta.filename, mimeType: meta.mimeType, maxBytes: MAX_FILE, maxUnits: 200 });
+      if (read.status === "complete" && read.units.length) {
+        const text = read.units.map((unit) => `${unit.unitKind === "slide" ? `[Slide ${unit.unit}] ` : ""}${unit.text}`).join("\n\n");
+        sources.push({ ...sourceBase, text: cleanText(text), extractionStatus: "complete", warnings: read.detail ? [read.detail] : [] });
+        continue;
+      }
+      const why = read.status === "complete" ? "The file contains no readable text." : read.detail;
+      sources.push({ ...sourceBase, text: "", extractionStatus: "unsupported", warnings: [`${meta.filename} could not be read: ${why}`] });
       continue;
     }
     sources.push({ ...sourceBase, text: cleanText(new TextDecoder("utf-8", { fatal: false }).decode(file.bytes)), extractionStatus: "complete", warnings: [] });

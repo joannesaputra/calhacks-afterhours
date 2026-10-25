@@ -20,7 +20,7 @@ export interface LiveOptions {
   signal: AbortSignal;
   emit: (progress: EngineProgress) => Promise<void>;
   context: VerifyContext;
-  /** Set when a CSV was supplied but could not be calculated; a report then fails with this error. */
+  /** Set when a CSV was supplied but could not be calculated. The model is told so; it never fails the task. */
   metricsError: EngineError | null;
   deadline: { dueAt: string; explanation: string } | null;
 }
@@ -61,7 +61,6 @@ function evaluate(input: EngineInput, sources: SourceDocument[], response: Model
     if (!plan.questions.length) return { issues: ["needs_input requires at least one specific question in plan.questions."] };
     return { value: { outcome: "needs_input", plan, questions: plan.questions } };
   }
-  if (value.products.some((product) => product.kind === "report") && options.metricsError) throw options.metricsError;
   if (plan.questions.some((question) => question.required)) return { issues: ["A ready result cannot contain required unanswered questions; return needs_input instead."] };
   const products = withCodeIds(input, value.products);
   const issues = productIssues(plan, sources, products, options.context);
@@ -69,12 +68,13 @@ function evaluate(input: EngineInput, sources: SourceDocument[], response: Model
   return { value: { outcome: "ready", plan, products } };
 }
 
-function payload(input: EngineInput, sources: SourceDocument[], context: VerifyContext): string {
+function payload(input: EngineInput, sources: SourceDocument[], context: VerifyContext, metricsError: EngineError | null): string {
   return JSON.stringify({
     now: input.now, receivedAt: input.email.receivedAt,
     email: { from: input.email.from, subject: input.email.subject, attachments: input.email.attachments.map(({ id, filename, mimeType }) => ({ id, filename, mimeType })) },
     organization: input.organization, answers: input.answers, requestedSlides: context.requestedSlides,
     calculatedMetrics: context.metrics,
+    ...(metricsError ? { calculationNote: `The attached CSV could not be used for calculated figures (${metricsError.message}). Treat it as plain text and quote only figures that appear in it.` } : {}),
     calculatedDates: context.allowedDates,
     sources: sources.map(({ id, kind, title, filename, text, extractionStatus, warnings }) => ({ id, kind, title, filename, text, extractionStatus, warnings })),
   });
@@ -89,7 +89,7 @@ export async function generateLive(input: EngineInput, sources: SourceDocument[]
     const record = budget.calls.at(-1)!;
     await options.emit({ stage: purpose === "generate" ? "plan" : "verify", message: `Live model call ${budget.calls.length} of ${limit} (${purpose}, ${options.client.model}) finished in ${record.durationMs} ms; ${usageText(record)}.` });
   };
-  const request = payload(input, sources, options.context);
+  const request = payload(input, sources, options.context, options.metricsError);
   const first = await budget.call("generate", { instructions: SYSTEM, input: request }, options.signal);
   await report("generate");
   let outcome = evaluate(input, sources, first, options);

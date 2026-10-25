@@ -240,7 +240,7 @@ input:disabled, select:disabled { background: var(--hover); color: var(--ink-2);
 .tl-error .tl-body strong { color: var(--bad-ink); }
 .message { white-space: pre-wrap; background: var(--surface-2); border-radius: var(--radius-sm); padding: 12px; font-family: inherit; font-size: 0.95rem; overflow-wrap: anywhere; }
 
-.file-card { display: flex; align-items: center; gap: var(--s2); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--s2); }
+.file-card { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--s2); }
 .file-icon { color: var(--accent-strong); flex: none; }
 .file-info { flex: 1; min-width: 0; }
 .file-name { font-weight: 650; }
@@ -361,3 +361,33 @@ input:disabled, select:disabled { background: var(--hover); color: var(--ink-2);
 .option { cursor: pointer; }
 .option:has(input:checked) { border-color: var(--accent, currentColor); }
 .btn-sm { padding: 4px 12px; font-size: 0.875rem; }
+
+/* File preview side panel (opens beside the task, like a chat app's file viewer). */
+.file-open { display: flex; align-items: center; gap: var(--s2); flex: 1; min-width: 0; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: var(--radius); }
+.file-open:hover .file-name { text-decoration: underline; }
+.file-open:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 4px; }
+.file-open-static { cursor: default; }
+.file-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.file-card-active { border-color: var(--accent-strong); }
+.block { display: block; }
+.drawer-scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 40; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); z-index: 41; display: flex; flex-direction: column; gap: var(--s1); background: var(--surface); border-left: 1px solid var(--border-strong); box-shadow: -16px 0 48px rgba(0, 0, 0, 0.6); padding: var(--s2); overflow: hidden; animation: drawer-in 160ms ease-out; }
+.drawer-head { display: flex; align-items: flex-start; gap: var(--s1); }
+.drawer-note { display: flex; gap: 6px; align-items: flex-start; }
+.drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
+@keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
+@media (min-width: 1500px) {
+  body.drawer-open { padding-right: 560px; }
+  .drawer-scrim { display: none; }
+}
+@media (max-width: 900px) {
+  .drawer-head { flex-wrap: wrap; }
+  .file-actions { align-items: stretch; width: 100%; }
+}
+
+.dialog-wide { width: min(640px, calc(100vw - 32px)); }
+.dialog-body textarea { width: 100%; }
+.check { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.btn-danger-ghost { color: var(--bad-ink); }
+.btn-danger-ghost:hover:not(:disabled) { background: rgba(255, 90, 90, 0.12); }

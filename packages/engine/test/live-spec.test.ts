@@ -83,7 +83,7 @@ describe("model-facing output specification", () => {
     for (const value of [...OutputKindSchema.options, ...ContentBlockSchema.shape.kind.options, ...ContentBlockSchema.shape.basis.options, ...SlideContentSchema.shape.layout.options, "bar", "line"]) expect(text, value).toContain(`"${value}"`);
     const prompt = systemPrompt();
     expect(prompt).toMatch(/"docx" and "pptx" are file formats/);
-    expect(prompt).toMatch(/ONLY "proposal", "report" or "presentation"/);
+    expect(prompt).toMatch(/ONLY "proposal", "report", "presentation" or "document"/);
   });
 
   it("is derived from the validating schema, so changing the schema changes the specification", () => {

@@ -6,6 +6,7 @@ import {
   ContextViewSchema,
   FolderOptionsSchema,
   OpenedEmailSchema,
+  ReplyViewSchema,
   type ContextCorrectionBody,
   type CreateGrantBody,
   DemoInjectResultSchema,
@@ -15,6 +16,7 @@ import {
   TaskDetailSchema,
   TaskSummarySchema,
   WorkspaceSettingsSchema,
+  type ReplySendBody,
   type SettingsPatch,
   type WorkAnswer,
 } from "@afterhours/contracts";
@@ -121,8 +123,13 @@ export const api = {
     request(`/tasks/${encodeURIComponent(id)}/review`, TaskSummarySchema, { method: "POST", body: { revision, action } }),
   answers: (id: string, revision: number, answers: WorkAnswer[]) =>
     request(`/tasks/${encodeURIComponent(id)}/answers`, TaskSummarySchema, { method: "POST", body: { revision, answers } }),
+  deleteTask: (id: string) => request(`/tasks/${encodeURIComponent(id)}`, z.object({ deleted: z.boolean(), files: z.number() }), { method: "DELETE" }),
   retry: (id: string, revision: number) =>
     request(`/tasks/${encodeURIComponent(id)}/retry`, TaskSummarySchema, { method: "POST", body: { revision } }),
+
+  reply: (id: string, signal?: AbortSignal) => request(`/tasks/${encodeURIComponent(id)}/reply`, ReplyViewSchema, { signal }),
+  sendReply: (id: string, body: ReplySendBody) =>
+    request(`/tasks/${encodeURIComponent(id)}/reply`, ReplyViewSchema, { method: "POST", body }),
 
   context: (signal?: AbortSignal) => request("/context", ContextStatusSchema, { signal }),
   taskContext: (id: string, signal?: AbortSignal) => request(`/tasks/${encodeURIComponent(id)}/context`, ContextViewSchema.nullable(), { signal }),

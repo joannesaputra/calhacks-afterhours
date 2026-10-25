@@ -4,12 +4,13 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, 
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { ZodError } from "zod";
 import {
-  PasswordGate, DomainError, lookupSession, type AppConfig, type Db,
+  PasswordGate, DomainError, lookupSession, type AppConfig, type Db, type GmailApi, type GmailTokens,
 } from "@afterhours/data";
 import { registerArtifactRoutes } from "./routes/artifacts";
 import { registerContextRoutes } from "./routes/context";
 import { registerDemoRoutes } from "./routes/demo";
 import { registerIntegrationRoutes, type GmailOAuthPort } from "./routes/integrations";
+import { registerReplyRoutes } from "./routes/reply";
 import { registerSessionRoutes } from "./routes/session";
 import { registerSettingsRoutes } from "./routes/settings";
 import { registerTaskRoutes } from "./routes/tasks";
@@ -24,6 +25,8 @@ export interface AppDeps {
   /** Disable rate limiting (tests). */
   rateLimit?: boolean;
   gmailOAuth?: GmailOAuthPort;
+  /** Gmail client used to send a reply. Defaults to Google; tests inject a double so nothing real is sent. */
+  makeGmailApi?: (tokens: GmailTokens, onTokens: (t: GmailTokens) => void) => GmailApi;
 }
 
 export interface Ctx {
@@ -117,6 +120,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerSessionRoutes(app, ctx);
   registerTaskRoutes(app, ctx);
   registerArtifactRoutes(app, ctx);
+  registerReplyRoutes(app, ctx, deps.makeGmailApi);
   registerContextRoutes(app, ctx);
   registerSettingsRoutes(app, ctx);
   registerIntegrationRoutes(app, ctx, deps.gmailOAuth);

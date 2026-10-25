@@ -158,6 +158,11 @@ describe("tasks, review, downloads", () => {
     expect(r.statusCode).toBe(200);
     expect(r.json().data.allowedSenders).toEqual(["boss@client.test"]);
     expect(r.json().data.notifications.digestTime).toBe("07:30");
+    expect(r.json().data.senderPolicy).toBe("approved");
+    const wide = await app.inject({ method: "PATCH", url: "/v1/settings", headers: h, payload: { senderPolicy: "same_domain" } });
+    expect(wide.json().data).toMatchObject({ senderPolicy: "same_domain", allowedSenders: ["boss@client.test"] });
+    expect((await app.inject({ method: "PATCH", url: "/v1/settings", headers: h, payload: { senderPolicy: "anyone" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/v1/settings", headers: { cookie } })).json().data.senderPolicy).toBe("same_domain");
     expect((await app.inject({ method: "PATCH", url: "/v1/settings", headers: h, payload: { twilioAuthToken: "x" } })).statusCode).toBe(400);
     expect((await app.inject({ method: "PATCH", url: "/v1/settings", headers: h, payload: { notifications: { digestTime: "25:00" } } })).statusCode).toBe(400);
     const integ = (await app.inject({ method: "GET", url: "/v1/integrations", headers: { cookie } })).json().data;

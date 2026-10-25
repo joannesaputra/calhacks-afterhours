@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { AnswersBodySchema, RetryBodySchema, ReviewBodySchema, TaskListQuerySchema } from "@afterhours/contracts";
 import {
-  getTaskDetail, listNotifications, listTasks, markReviewed, retryFailedTask, submitAnswers,
+  deleteTask, getTaskDetail, listNotifications, listTasks, markReviewed, retryFailedTask, submitAnswers,
 } from "@afterhours/data";
 import type { Ctx } from "../app";
 
@@ -24,6 +24,7 @@ export function registerTaskRoutes(app: FastifyInstance, ctx: Ctx): void {
     const b = RetryBodySchema.parse(req.body);
     return { data: retryFailedTask(ctx.db, idOf(req), b.revision, ctx.now()) };
   });
+  app.delete("/v1/tasks/:id", write, async (req) => ({ data: deleteTask(ctx.db, ctx.config, idOf(req), ctx.now()) }));
   app.post("/v1/tasks/:id/review", write, async (req) => {
     const b = ReviewBodySchema.parse(req.body);
     return { data: markReviewed(ctx.db, idOf(req), b.revision, b.action, ctx.now()) };
