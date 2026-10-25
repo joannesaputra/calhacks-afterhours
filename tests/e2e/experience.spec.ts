@@ -284,16 +284,16 @@ test("11. ingestion time and original email time are labeled separately and are 
   await page.goto(`/tasks/${taskId}`);
   const times = page.getByTestId("task-times");
   await expect(times.getByText(/^Entered the system/)).toContainText(day(detail.task.createdAt));
-  await expect(times.getByText(/^Original email received/)).toContainText(day(detail.email.receivedAt));
+  await expect(times.getByText(/^Email sent/)).toContainText(day(detail.email.receivedAt));
 
   // The request tab carries both labels as well.
   await page.getByRole("tab", { name: "Original request" }).click();
-  await expect(page.locator(".details-tabs").getByRole("tabpanel").getByText("Original email received", { exact: true })).toBeVisible();
+  await expect(page.locator(".details-tabs").getByRole("tabpanel").getByText("Email sent", { exact: true })).toBeVisible();
   await expect(page.locator(".details-tabs").getByRole("tabpanel").getByText("Entered the system", { exact: true })).toBeVisible();
 
-  // Queue cards show only ingestion time, and say so.
+  // Queue cards show the sender and when the email was sent.
   await page.goto("/");
-  await expect(page.getByRole("article").first()).toContainText("entered the system");
+  await expect(page.getByRole("article").first()).toContainText(/From .+ · sent /);
 });
 
 test("12. keyboard: source dialog opens and closes with focus restored, and review works without a mouse", async ({ page }) => {

@@ -26,7 +26,7 @@ function RequestTab({ detail, tz }: { detail: TaskDetail; tz?: string }) {
         <dt>From</dt><dd className="wrap-anywhere">{email.from.name ? `${email.from.name} <${email.from.email}>` : email.from.email}</dd>
         <dt>To</dt><dd className="wrap-anywhere">{email.to.join(", ") || "—"}</dd>
         <dt>Subject</dt><dd className="wrap-anywhere">{email.subject}</dd>
-        <dt>Original email received</dt><dd>{formatDateTime(email.receivedAt, tz)}</dd>
+        <dt>Email sent</dt><dd>{formatDateTime(email.receivedAt, tz)}</dd>
         <dt>Entered the system</dt><dd>{formatDateTime(detail.task.createdAt, tz)}</dd>
       </dl>
       <h3 className="h4">Message</h3>
@@ -196,7 +196,7 @@ export function TaskDetailView({ id }: { id: string }) {
         <div className="grow">
           <h1 className="wrap-anywhere">{task.title}</h1>
           <p className="muted small" data-testid="task-times">
-            Revision {task.revision} · <span>Entered the system {formatDateTime(task.createdAt, tz)}</span> · <span>Original email received {formatDateTime(detail.email.receivedAt, tz)}</span>
+            Revision {task.revision} · <span>Email sent {formatDateTime(detail.email.receivedAt, tz)}</span> · <span>Entered the system {formatDateTime(task.createdAt, tz)}</span>
           </p>
         </div>
       </div>

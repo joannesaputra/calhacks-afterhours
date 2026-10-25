@@ -182,6 +182,8 @@ export const TaskSummarySchema = z.object({
   subject: z.string(),
   requestedOutputs: z.array(OutputKindSchema),
   dueAt: isoTime.nullable(),
+  /** When the original email was sent/received (from the email itself), not when AfterHours picked it up. */
+  receivedAt: isoTime,
   createdAt: isoTime,
   updatedAt: isoTime,
   warningCount: z.number().int().nonnegative(),

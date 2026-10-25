@@ -15,6 +15,7 @@ export const WORKER_STALE_SECONDS = 45;
 
 function summaryOf(db: Db, r: TaskRow): TaskSummary {
   const art = db.prepare("SELECT COUNT(*) n FROM artifacts WHERE task_id=? AND revision=?").get(r.id, r.revision) as { n: number };
+  const intake = db.prepare("SELECT received_at FROM intake_messages WHERE id=?").get(r.intake_id) as { received_at: string };
   return {
     id: r.id,
     title: r.title,
@@ -27,6 +28,7 @@ function summaryOf(db: Db, r: TaskRow): TaskSummary {
     subject: r.subject,
     requestedOutputs: parseJson(r.requested_outputs_json, []),
     dueAt: r.due_at,
+    receivedAt: intake.received_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     warningCount: r.warning_count,

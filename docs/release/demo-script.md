@@ -31,7 +31,7 @@ Owner: Maricella. Status: **script and tooling tested; both team rehearsals NOT 
 | Time | Say / do | Proof on screen |
 |---|---|---|
 | 0:00 to 0:20 | "A client emails a request. AfterHours is already authorized to act on mail from approved senders, so nobody types a prompt." Show Settings → Automation: automation on, prepare automatically, approved sender list. | Approved senders list; Gmail disconnected (disclosed: demo trigger) |
-| 0:20 to 0:45 | Work queue → **Run demo → Proposal + kickoff deck**. Open the task: request, attachment, the two timestamps ("Original email received" vs "Entered the system"). Watch the Activity log move; it is ready in seconds. | Real persisted events; no percentage; badges Demo email + Fixture output |
+| 0:20 to 0:45 | Work queue → **Run demo → Proposal + kickoff deck**. Open the task: request, attachment, the two timestamps ("Email sent" vs "Entered the system"). Watch the Activity log move; it is ready in seconds. | Real persisted events; no percentage; badges Demo email + Fixture output |
 | 0:45 to 1:25 | Open **Content preview**: proposal, then the five-slide deck. Go to slide 4 (fee): **Strategy fee: USD 6,000**. Open a source chip: show title, locator, and the "assumption" blocks. | Fee and scope; assumptions labelled; sources inspectable |
 | 1:25 to 1:45 | **Download** both files. Open the proposal (Word/Pages) and the deck (PowerPoint/Keynote) to show they are real. | Real DOCX (about 10 KB) and 5-slide PPTX |
 | 1:45 to 2:00 | **Mark reviewed**, then refresh the page. "This records my acceptance. Nothing was sent to the client." | Status stays "Marked reviewed" after reload |

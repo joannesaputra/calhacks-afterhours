@@ -44,7 +44,7 @@ Palette from the brief. One deliberate change: secondary text is `#52687F` (not 
 ## Timestamps
 
 Two different times are always labeled separately: **Entered the system** is `task.createdAt` (ingestion time) and
-**Original email received** is `email.receivedAt` (the message's own time). Demo fixtures carry an intentionally old
+**Email sent** is `email.receivedAt` (the message's own time). Demo fixtures carry an intentionally old
 `receivedAt`, so the two differ. Task header and the Original request tab show both; queue cards show only "entered the
 system N ago" because `TaskSummary` has no `receivedAt`. E2E test 11 checks both labels against the API values.
 
