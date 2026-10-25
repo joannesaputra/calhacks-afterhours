@@ -8,7 +8,7 @@ This section is the current record. The section after it (candidate `ae422e6`) i
 |---|---|
 | Branch | `integration/batch7` |
 | **Tested implementation candidate** | `09f54ccedae13762ebca588818c6cbd698cf511b` (`09f54cc`) |
-| Later commits | docs-only (this file, `darren.md`, release-doc banners). They add no code and were not re-run. |
+| Later commits | `9a5684f` adds the live-output fix and `worker:once` (code, tested below); everything after it is docs-only. The checks in "Commands and exit codes" below were run on `09f54cc`; the same checks on `9a5684f` are in the live-verification section. |
 | Merged, in order | `experience-batch7` `e310849` (fast-forward; Maricella's UI, Twilio delivery adapter, Playwright suite, contains `experience-batch6` and the Batch 7 base `1b4deca`) → `engine-batch7` `3d4a8e2` (Joanne; merge `a1b6569`) → `feature/claude-provider` `13e1984` (Darren; merge `90961d2`) → `scripts/e2e.mjs` provider fix → UI re-theme `09f54cc` |
 | Lockfile | taken from `experience-batch7` (adds Playwright, TanStack Query, lucide-react, jsdom for the web package). `pnpm install --frozen-lockfile` exit 0 on pnpm 10.33.4, Node v20.20.2. No manual lockfile edit, no new dependency from me. |
 | `main`, `platform`, `platform-batch6` | untouched |
@@ -32,9 +32,126 @@ Two UIs defined the same four routes, so only one set can build. Decision (Maric
 
 ## Claude provider in the candidate
 
-`packages/engine/src/providers/anthropic.ts` (Messages API over `fetch`, no SDK, typed errors, JSON-only instruction, `max_tokens` → incomplete), `providers/env.ts` (`MODEL_PROVIDER=anthropic` only), `liveModelProblem` in `packages/data/src/config.ts`. The OpenAI adapter, `OPENAI_API_KEY` and the `openai` provider value are gone; `MODEL_PROVIDER=openai` now fails configuration at startup. Tested with a fake `fetch` (status mapping, key never echoed, incomplete, fence unwrapping, environment selection). **Live result:** one real run failed output validation (see "Live Claude smoke test" below); the key, the model id and billing worked.
+`packages/engine/src/providers/anthropic.ts` (Messages API over `fetch`, no SDK, typed errors, JSON-only instruction, `max_tokens` → incomplete), `providers/env.ts` (`MODEL_PROVIDER=anthropic` only), `liveModelProblem` in `packages/data/src/config.ts`. The OpenAI adapter, `OPENAI_API_KEY` and the `openai` provider value are gone; `MODEL_PROVIDER=openai` now fails configuration at startup. Tested with a fake `fetch` (status mapping, key never echoed, incomplete, fence unwrapping, environment selection). **Live result:** the first real run failed output validation because the prompt lacked the schema; after the fix one real proposal run passed (see "Live Claude proposal verification after the schema fix").
 
-## Live Claude smoke test (one task): FAIL
+## Live Claude proposal verification after the schema fix: PASS (one task)
+
+**Result: LIVE PROPOSAL GENERATION PASSED for one proposal task.** This is one demo-intake proposal in live mode. It is not live Gmail, not a report or clarification run, not an accuracy benchmark, and not an overnight run.
+
+### 1. Original failure and confirmed findings
+
+- Failed task (historical, section below): `a8f10320-6f3d-45e9-9e52-e111d7dc8251` on `81c0bca`, `MODEL_INVALID_OUTPUT`, `plan.requestedOutputs.0 Invalid option`, two completed provider calls, no products.
+- **Observed in code:** `SYSTEM` in `live.ts` told the model to match "the AfterHours WorkPlan and WorkProduct shapes" and never defined them; the repair call added only a sentence plus the issue list. No field, nested object or enum value was visible to the model.
+- **Inference, now supported by one run:** the missing contract explains the validation failure, because the same code with a full specification reached `ready` on the first call. The exact wrong value from the failed run is unknown (the raw response was not kept); the first failed run showed 12 reported issues (the list is capped at 12), so more than one field was probably wrong. One successful run does not prove every future response will validate.
+
+### 2. What changed (commit `9a5684f6d0a504468ce3bb9a38d0d74133e7ca8c`, pushed before the live run)
+
+| File | Change |
+|---|---|
+| `packages/engine/src/liveSpec.ts` (new) | `LiveResponseSchema` moved here and exported; `responseJsonSchema()` derives a JSON Schema from it with `z.toJSONSchema` (shared definitions, only `$schema` and the date-time regex pruned); `FIELD_RULES` for what a schema cannot say (output kind versus file format, "all fields present, unused ones null or `[]`", evidence and quote rules, basis meanings, amounts/percentages/dates must come from the sources, slide count and layout budgets, plan deadline fields null, outcome rules); a placeholder-only `FORMAT_EXAMPLE`; `systemPrompt()` joins them. |
+| `packages/engine/src/live.ts` | `SYSTEM = systemPrompt()`. Generation and repair both send it; the repair call adds an instruction to return the complete corrected object, and still carries the original request, the previous response (truncated as before) and the validation issues. Validation, grounding, the single repair and the call budget are unchanged. |
+| `apps/worker/src/once.ts`, `once-main.ts`, root script `worker:once` | One-shot control (below). |
+| tests | `packages/engine/test/live-spec.test.ts` (11 tests), `apps/worker/test/once.test.ts` (4 tests). |
+
+**Drift protection:** the structural part of the instructions is generated from the validating Zod schema, so it cannot diverge. The hand-written rules and the example are guarded by tests: the contract schemas' fields and enums are checked against the generated schema; every enum option must appear in the right rule; every quoted word in the rules must be a real field, enum option or request field; the example must validate and must fail grounding when used as content (two calls, then `MODEL_INVALID_OUTPUT`); a changed schema changes the specification.
+
+### 3. Offline checks on a fresh clone of `9a5684f` (clean status; no `.env`)
+
+| Command | Exit | Result |
+|---|---|---|
+| `pnpm install --frozen-lockfile` | 0 | lockfile unchanged |
+| `pnpm setup:local`, `pnpm check:ready` | 0, 0 | generation=fixture, notifications=outbox |
+| `pnpm typecheck`, `pnpm lint` | 0, 0 | |
+| `pnpm test` | 0 | 29 files, 345 tests (330 before; 15 new) |
+| `env -u NODE_ENV pnpm build` | 0 | |
+| `pnpm test:e2e` | 0 | 25 passed, 1 skipped (stub-engine failure case, not applicable) |
+| QA harness `qa/system-batch7` @ `d248e51` | 0 | 53 of 53 |
+
+### 4. Bounded live run: how the limit was enforced
+
+- Candidate run: `9a5684f`, working tree clean, same commit the processes executed. `.env` untracked (checked against tracked file names).
+- Preflight without printing values: mode live, provider `anthropic`, model `claude-sonnet-5-5`, key present, notification channel outbox, Gmail not configured, no Twilio settings, no WhatsApp recipient. API on 4631, web on 3631, scratch database and artifact directory, all ports free beforehand.
+- **Enforcement:** the worker was not started as a service. After one demo injection, `pnpm worker:once` ran the real worker (job lease, engine call, terminal commit) for at most one job and one notification with no polling loop, so a retryable failure could only have been requeued, never executed again. The provider adapter is a raw `fetch` (no SDK, no hidden retry); the engine allows one generation and at most one repair, with the existing 3-call, 60 s and 12,000-token limits unchanged. One injection, one new replay key (`live2-proposal-189513f6`), no retry, no regenerate. Tested by `once.test.ts` (retryable failure runs once and stays queued; the ordinary worker's retry policy is unchanged).
+- Baseline: new scratch database with 0 tasks; 0 provider calls.
+
+### 5. Result
+
+| Item | Value |
+|---|---|
+| Task | `ac55e3c3-42ca-4da4-b558-52620e6d1f05`, revision 1; `generationMode=live`, `ingestionMode=demo` |
+| Final state | `ready` (then `approved` after one "Mark reviewed") |
+| Provider requests | **1** (generate). No repair was needed. |
+| Usage | 27,173 ms; 5,150 input and 4,743 output tokens (from the progress event). `worker:once` wall time 28.0 s. Cost not calculated (no verified price in the repository). |
+| Missing telemetry | provider request id is returned by the adapter but not stored anywhere; no per-request billing record |
+| Fallback | none: live mode has no fixture fallback, and the log shows `Requesting a bounded structured plan from the configured live model` then `Live model call 1 of 3` |
+| Database manipulation | none; state came from the worker's normal commit |
+
+### 6. Artifacts (downloaded through the application's authenticated route, not the demo bearer)
+
+| File | Bytes | SHA-256 (first 16) | Checks |
+|---|---|---|---|
+| `Launch-Strategy-Proposal-for-Maple-Moss-r1.docx` (`art_09c24e83…`) | 11,576 | `9ef799d3b74a97f9` | HTTP 200; correct Word media type; `Cache-Control: private, no-store`; size and hash equal the manifest; ZIP valid; `word/document.xml` present; one fixed-layout table (smallest column 3971 twips) |
+| `Maple-Moss-Kickoff-r1.pptx` (`art_cfaf6a20…`) | 98,898 | `a41cb5532b1832a9` | same; `ppt/presentation.xml` present; **exactly 5** `ppt/slides/slideN.xml` parts |
+
+The same bytes were also downloaded by the UI's Download buttons (browser run below); both hashes matched the manifest.
+
+**Content, against the actual fixture bytes** (email: "Please prepare a proposal DOCX and a five-slide kickoff PPTX… ready by Monday, October 26, 2026 at 9:00 AM Pacific… The engagement would start October 26 and run for four weeks"; brief: USD 6,000, paid media separate; company profile: standard four-week package, exclusions):
+
+- Products: exactly `proposal` and `presentation`, matching `requestedOutputs`.
+- Client Maple & Moss, provider Harbor Creative, scope (discovery, audience and message strategy, four-week content calendar, measurement plan), fee USD 6,000 with "paid media is separate", duration four weeks, exclusions as in the profile, the sales-growth constraint, no payment schedule, no outcome promise. All as in the sources.
+- Dates: plan deadline `2026-10-26T16:00:00.000Z` (9:00 AM PDT) resolved by code from the email's receipt time and the organization time zone; the live run date (Oct 24) is not used. The engagement table shows start October 26 and end November 22: the end date comes from the engine's existing code-derived dates (`calculatedDates`) and is labelled "Calculated in code"; the email states only a start and four weeks.
+- Evidence: 14 source references, all pointing at this task's three sources; 13 of 13 quotes found verbatim in their sources; basis counts 11 source, 2 calculated, 2 recommendation, 0 assumption blocks. Recommendations are labelled ("Recommendation from Harbor Creative; not stated in the sources"); the draft is labelled "not sent or accepted".
+- Leak scan of both files and the previews: no `EXAMPLE` placeholder, no schema or instruction wording, no raw source ids, no key pattern, no "docx"/"pptx" as content.
+- Cosmetic: the timeline block's source label reads "Calculated in code from Proposal and five-slide kickoff deck for Maple & Moss" (the email subject is the cited source title).
+
+**Visual inspection of the exported files: mostly NOT RUN.**
+
+- Quick Look (macOS, not Word or PowerPoint) rendered page 1 of the DOCX and slide 1 of the PPTX: readable, no clipping. Slides 2 to 5 and DOCX page 2 onward were not rendered.
+- PowerPoint export to PDF was attempted by AppleScript and timed out (`-1712`, then `-128`): a PowerPoint instance that has been running for six days (not started by this run) did not answer, probably a dialog waiting for input. I did not touch it.
+- Word is not installed; LibreOffice is not installed.
+- Manual check for Darren: open both files in `var/live-output/` in PowerPoint and Word and look at all five slides and every page.
+
+### 7. UI (Playwright with the installed Chromium; the built-in browser pane was not used)
+
+- Deep link to the task while signed out → `/login?returnTo=%2Ftasks%2Fac55e3c3-…` → after sign-in the same task page.
+- Labels: "Ready for review", "Demo email", "Live model" (no "Fixture output" badge); top bar "Live model · claude-sonnet-5-5", "Gmail disconnected", "Notifications: outbox (simulated)". The banner "The worker is not running" appeared because only the one-shot worker was used; it is accurate.
+- Both products render in the preview (the proposal tab shows the evidence chips and the CALCULATED / RECOMMENDATION labels); Download buttons worked and showed "checksum verified". Desktop and 390 px screenshots taken; no horizontal overflow at 390 px.
+- Marked reviewed once: "Marked reviewed. Nothing was sent." Then the API was killed and restarted, the page reloaded: still reviewed, `GET /tasks/<id>` status `approved`, one task, two artifacts, one live call and one planning attempt in the log, one notification (`outbox`, `simulated`; simulated is not delivered). The only new event after readiness was "Marked reviewed. Nothing was sent." No email or WhatsApp could be sent (no Gmail, no Twilio configuration).
+
+### 8. Where the files are
+
+Untracked and gitignored, still on this machine: `calhacks-afterhours-b7/var/live-output/` holds the DOCX, the PPTX, the Quick Look images, two screenshots, `task-detail.json` and `run-result.json` (no secrets; the key does not occur in any of them or in the logs). The scratch database and logs were deleted after the key scan; the API and web processes I started are stopped; the one-shot worker exited. Not mine and untouched: a Microsoft PowerPoint instance, an orphaned QA worker from an earlier harness run (PID 7459, temporary database), and the process on port 4000.
+
+### 9. Remaining blocked, not run, or limited
+
+Word and all-page/all-slide visual inspection; one successful proposal does not cover a live report, clarification or no-action run; live Gmail and WhatsApp; Docker; remote host; overnight run; no cost figure; repeatability of live output is unmeasured (one sample).
+
+### 10. Quality questions
+
+1. **PASS.** Full envelope, nested definitions and enums are in the system prompt (`live-spec.test.ts` "carries every field…", "carries every enum value…").
+2. **PASS.** Repair uses the same `SYSTEM`; test "rejects 'docx'… then repairs" asserts the schema and rules in the repair instructions and the issue `plan.requestedOutputs.0` in its input.
+3. **PASS.** Schema derived from the validator; rules and example guarded by the parity tests above.
+4. **PASS.** Rule 1 and the "file formats" test.
+5. **PASS, with a limit.** The test that the legacy sentence names no field and the "docx" rejection test demonstrate the missing contract and the failure mode; the legacy sentence is quoted in the test, the old code path is not re-run. The live proof is the passing run.
+6. **PASS.** Repair success: exactly 2 calls; failed repair: `MODEL_INVALID_OUTPUT`, nonretryable, exactly 2 calls.
+7. **PASS.** Unsupported amount and unknown source are both reported and repaired; quote, citation, date, layout and arithmetic checks untouched.
+8. **PASS.** Deadline from code (`2026-10-26T16:00Z`), product and block IDs replaced in code, calculation tests unchanged and passing.
+9. **PASS.** `needs_input` and `skipped` tests; a ready result with a required question is repaired.
+10. **PASS.** Section 3.
+11. **PASS.** `9a5684f6d0a504468ce3bb9a38d0d74133e7ca8c`, clean tree, pushed before the run.
+12. **PASS.** `worker:once` (section 4) plus raw `fetch` and the engine's single repair.
+13. **PASS.** 1 request, 27,173 ms, 5,150 in / 4,743 out.
+14. **PASS.** ready through the real API, queue, lease, engine, provider and commit; no fallback or database edits.
+15. **PASS.** Authenticated routes, hashes equal the manifest; same hashes through the UI.
+16. **PASS** for content and structure (section 6); the November 22 end date is code-derived, not stated in the email.
+17. **NOT RUN** for full export rendering; Quick Look page 1 and slide 1 only; PowerPoint timed out; no Word.
+18. **PASS.** Section 7.
+19. **PASS.** No key, scratch database, raw response or private log in git, outputs or public errors (scan: 0 matches).
+20. **PASS.** This section and the historical one below.
+21. **PASS.** Pushed to `integration/batch7`; `main` untouched; unrelated work untouched.
+22. **PASS.** Section 8.
+
+## Earlier live Claude smoke test (historical, commit `81c0bca`): FAIL
 
 One real task through the real API, queue, worker and the Claude provider, run once and not repeated.
 
@@ -99,7 +216,7 @@ Notes on how these ran:
 
 | Item | Status | Owner / path |
 |---|---|---|
-| Claude live generation | **FAIL** in one real run (`MODEL_INVALID_OUTPUT`: the prompt does not give the model the plan schema); credentials, model and billing worked | Joanne (prompt/schema), then one more live run |
+| Claude live generation | **PASS for one proposal task** after the schema fix (`9a5684f`); the earlier run on `81c0bca` failed. Live report, clarification and no-action runs: NOT RUN | Darren, if wider live coverage is wanted |
 | Live Gmail, live WhatsApp (Twilio adapter exists, no account/eligibility) | BLOCKED | external |
 | Word rendering of the DOCX; PowerPoint/Word visual check on this candidate | NOT RUN | anyone with Word |
 | Docker, remote host, real overnight run, two timed team rehearsals | NOT RUN | needs a host and the team |
