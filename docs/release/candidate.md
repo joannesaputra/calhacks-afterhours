@@ -1,4 +1,4 @@
-> **Batch 7:** this record describes `0e8395e` (Batch 6). The current integration candidate is `ae422e6` on `integration/batch7`; see `docs/batches/batch-7/integration.md`. The engine row below is superseded by Joanne's `engine-batch6`.
+> **Batch 7 (final):** this record describes `0e8395e` (Batch 6). The current integration candidate is `09f54cc` on `integration/batch7`; see `docs/batches/batch-7/integration.md`. Rows here about the UI (SpaceXAI snapshot), delivery (foundation stub), the engine (`person-2-engine`) and the browser suite (NOT RUN) are superseded: the candidate now has Maricella's UI re-themed in the SpaceXAI style, the Twilio delivery adapter (mock-tested), `engine-batch7`, the Claude provider, and a browser suite that ran 25 passed / 1 skipped. The current integration candidate is `ae422e6` on `integration/batch7`; see `docs/batches/batch-7/integration.md`. The engine row below is superseded by Joanne's `engine-batch6`.
 
 # Release candidate record (Darren)
 

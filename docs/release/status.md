@@ -1,4 +1,4 @@
-> **Batch 7:** the decision below was made on `0e8395e`. It is unchanged in scope for `ae422e6` (same demo scope, same limits); the current candidate and evidence are in `docs/batches/batch-7/integration.md`.
+> **Batch 7 (final):** the current candidate is `09f54cc`; see `docs/batches/batch-7/integration.md` (the limits about an automated browser suite, a stub delivery package and an unpushed SpaceXAI snapshot below no longer apply; live model, Gmail, WhatsApp, Docker and overnight are still not demonstrated). **Batch 7 (earlier):** the decision below was made on `0e8395e`. It is unchanged in scope for `ae422e6` (same demo scope, same limits); the current candidate and evidence are in `docs/batches/batch-7/integration.md`.
 
 # Final status and limitations (Darren)
 

@@ -1,4 +1,95 @@
-# Batch 7 — integration record (Darren)
+# Batch 7 — final integration record (Darren)
+
+This section is the current record. The section after it (candidate `ae422e6`) is kept as history: it describes the platform + engine candidate before the UI, delivery adapter, browser suite and Claude provider were merged.
+
+## Final candidate
+
+| Item | Value |
+|---|---|
+| Branch | `integration/batch7` |
+| **Tested implementation candidate** | `09f54ccedae13762ebca588818c6cbd698cf511b` (`09f54cc`) |
+| Later commits | docs-only (this file, `darren.md`, release-doc banners). They add no code and were not re-run. |
+| Merged, in order | `experience-batch7` `e310849` (fast-forward; Maricella's UI, Twilio delivery adapter, Playwright suite, contains `experience-batch6` and the Batch 7 base `1b4deca`) → `engine-batch7` `3d4a8e2` (Joanne; merge `a1b6569`) → `feature/claude-provider` `13e1984` (Darren; merge `90961d2`) → `scripts/e2e.mjs` provider fix → UI re-theme `09f54cc` |
+| Lockfile | taken from `experience-batch7` (adds Playwright, TanStack Query, lucide-react, jsdom for the web package). `pnpm install --frozen-lockfile` exit 0 on pnpm 10.33.4, Node v20.20.2. No manual lockfile edit, no new dependency from me. |
+| `main`, `platform`, `platform-batch6` | untouched |
+
+## Conflicts and how they were resolved
+
+- `experience-batch7` was 0 commits behind `integration/batch7`, so it merged as a fast-forward; there was no file conflict.
+- `engine-batch7` conflicted only in `packages/engine/test/engine.test.ts`: both sides had rewritten the DEF-2/4/6 regression assertions after Joanne's engine changes. Resolution: take Joanne's file whole (her oracles check the computed values and page width rather than phrasing; they cover the same defects). Her engine source changes (engagement interval, unusable-brief handling, honest no-action plan) merged cleanly.
+- `feature/claude-provider` merged without conflict. One reference to the removed provider remained in `scripts/e2e.mjs` (the unconfigured-live-model stack used `MODEL_PROVIDER=openai`, which the config now rejects); it uses the Claude settings with an empty key.
+- QA harness: one suite (`04-clarification-state`) also used `MODEL_PROVIDER=openai`; changed to the Claude settings with an empty key.
+
+## UI reconciliation
+
+Two UIs defined the same four routes, so only one set can build. Decision (Maricella's recorded choice, kept): **keep her application** (routes, components, content preview, charts, source dialog, settings forms, notifications page, delivery adapter, Playwright suite) because it is the only one with those features and tests. **Darren's standing rule is that the SpaceXAI look wins**, so her UI was re-themed rather than replaced:
+
+- `apps/web/app/globals.css`: the SpaceXAI palette (near-black surfaces, hairline borders), pill buttons, Helvetica Neue, the letter-spaced wordmark and the horizon mark (`apps/web/components/brand.tsx`), a sticky top navigation instead of the side rail, dark dialogs, toasts and menus. Document and slide previews stay on white paper on purpose (they represent the Word and PowerPoint files); they use a scoped light palette.
+- Markup, routes, labels, ARIA structure and test ids are unchanged, so her 26 browser tests still describe the same pages.
+- Darren's original pages (`664cc98`, `79a35af`, `1e29d42`) remain restorable from history; they were removed from the tree by Maricella's merge `f38e86e`, as she reported. His `?next=` return path became her `?returnTo=` (same-origin relative path only); the deep-link run is covered by her browser tests (7, 21, 24).
+- Screenshots were taken with Playwright at 1440 px and 390 px on the fixture stack (queue, task page with the document preview, settings, mobile task page). No horizontal overflow was visible. The built-in browser pane refused `localhost` in this session, so no pane-based check was done.
+- Color contrast was not measured with a tool. Secondary text is white at 64% on the card color (about 7:1 by calculation).
+
+## Claude provider in the candidate
+
+`packages/engine/src/providers/anthropic.ts` (Messages API over `fetch`, no SDK, typed errors, JSON-only instruction, `max_tokens` → incomplete), `providers/env.ts` (`MODEL_PROVIDER=anthropic` only), `liveModelProblem` in `packages/data/src/config.ts`. The OpenAI adapter, `OPENAI_API_KEY` and the `openai` provider value are gone; `MODEL_PROVIDER=openai` now fails configuration at startup. Tested with a fake `fetch` (status mapping, key never echoed, incomplete, fence unwrapping, environment selection). **Not run against the real Anthropic API**: a key was configured locally but no live task was started, so the key, the model id and real output validity are unverified.
+
+## Commands and exit codes (fresh `git clone --no-hardlinks` of `09f54cc`, clean status before and after)
+
+| Command | Exit | Observed |
+|---|---|---|
+| `pnpm install --frozen-lockfile` | 0 | |
+| `pnpm setup:local` then `pnpm check:ready` | 0 / 0 | generation=fixture, notifications=outbox, demo=true |
+| `pnpm typecheck` | 0 | |
+| `pnpm lint` | 0 | |
+| `pnpm test` | 0 | 27 files, 330 tests |
+| `pnpm build` (run as `env -u NODE_ENV pnpm build`) | 0 | |
+| `pnpm test:e2e` | 0 | **25 passed, 1 skipped** in about 1.1 min; real API, worker, engine and browser; nothing BLOCKED. The skipped test is the stub-engine failure case, not applicable because the engine is real. |
+| QA harness `qa/system-batch7` @ `d248e51`, `QA_REPO_ROOT` = the clone | 0 | 53 tests, 53 pass |
+
+Notes on how these ran:
+
+- **Chromium:** the machine had Playwright Chromium build 1234 but the suite needs 1243, so `test:e2e` first exited 4 (NOT RUN, as designed). With the user's approval I installed it. `playwright install` timed out in Node (30 s connection limit), so I fetched the two official zips from `cdn.playwright.dev` with `curl` and extracted them into `~/Library/Caches/ms-playwright` with the standard markers; the binary reports 153.0.8010.12.
+- **`env -u NODE_ENV`:** sourcing `.env` into a shell sets `NODE_ENV=development`, which breaks `next build` prerender of `/_global-error`. A build with `NODE_ENV` unset is fine.
+- **Typecheck after deleting `.next`:** one typecheck run exited 2 after `apps/web/.next` was deleted while a stale, gitignored `tsconfig.tsbuildinfo` still listed `.next/types` files. Re-runs and the fresh clone are exit 0. It is a local build-cache effect, not a source defect.
+- The suite runs in fixture mode and forces empty model keys for its failure stack, so the real key in my local `.env` was not used.
+
+## Question answers (changes from the earlier record)
+
+- **Committed frontend and provenance:** Maricella's application (author Claude on her branch, `experience-batch6`/`7`) with Darren's SpaceXAI visual system applied in `09f54cc`.
+- **Browser test command runs tests:** PASS. 25 passed, 1 skipped, exit 0 on the fresh clone.
+- **Clean checkout reproduces:** PASS for `09f54cc`.
+- **Stub in the runtime path:** none in the engine or web app. `packages/delivery` is now the Twilio adapter (mock-tested; no live send); the outbox is still what the demo uses.
+- **QA harness:** 53/53 on the final code.
+
+## Remaining failures, blocked and not run
+
+| Item | Status | Owner / path |
+|---|---|---|
+| Claude live generation against the real API | NOT RUN (key present, never called) | Darren, one deliberate billed smoke test |
+| Live Gmail, live WhatsApp (Twilio adapter exists, no account/eligibility) | BLOCKED | external |
+| Word rendering of the DOCX; PowerPoint/Word visual check on this candidate | NOT RUN | anyone with Word |
+| Docker, remote host, real overnight run, two timed team rehearsals | NOT RUN | needs a host and the team |
+| Browser login with every hostile `returnTo` value | PARTIAL: unit test (13 cases) and deep-link browser tests; not every value in a browser | Maricella |
+| Screen-reader pass; automated contrast measurement of the dark theme | NOT RUN | Maricella |
+| Built-in browser pane check of the restyled UI | NOT RUN (pane refused `localhost`); Playwright screenshots used instead | |
+| Older release docs (`docs/release/*`, Batch 6 reports) | still describe `0e8395e`; banners point here | Darren |
+
+## Next tested commands
+
+```bash
+git switch integration/batch7
+corepack pnpm install --frozen-lockfile
+corepack pnpm setup:local            # untracked .env with generated secrets; add ANTHROPIC_API_KEY only for live mode
+corepack pnpm check:ready
+corepack pnpm dev
+corepack pnpm demo:proposal          # fixture mode unless GENERATION_MODE=live
+env -u NODE_ENV corepack pnpm test:e2e
+```
+
+---
+
+# Batch 7 — earlier integration record (candidate `ae422e6`, superseded by the final record above)
 
 One committed integration candidate now contains the platform, the real engine and the chosen UI. Everything below was observed on it. Reports from earlier batches are history, not evidence for this commit.
 

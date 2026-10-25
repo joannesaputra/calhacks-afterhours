@@ -1,4 +1,4 @@
-> **Batch 7:** rows below describe `0e8395e`. Engine, artifact and QA rows were re-run on `ae422e6` (QA harness 53/53 after four reconciled expectations; manual browser pass; downloads verified). The browser suite is still **NOT RUN**. Details: `docs/batches/batch-7/integration.md`.
+> **Batch 7 (final):** superseded in part by `docs/batches/batch-7/integration.md` for candidate `09f54cc`: browser suite PASS (25 passed, 1 skipped, fresh clone), QA harness 53/53, delivery adapter present but live send BLOCKED, live Claude generation NOT RUN. Older text follows. **Batch 7 (earlier):** rows below describe `0e8395e`. Engine, artifact and QA rows were re-run on `ae422e6` (QA harness 53/53 after four reconciled expectations; manual browser pass; downloads verified). The browser suite is still **NOT RUN**. Details: `docs/batches/batch-7/integration.md`.
 
 # Capability matrix (candidate `0e8395e`)
 
