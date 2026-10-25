@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/afterhours-logo-white.svg">
+    <img src="brand/afterhours-logo-black.svg" alt="AfterHours" height="40">
+  </picture>
+</p>
+
 # AfterHours (working name)
 
 AfterHours watches a connected Gmail inbox. When an authorized sender asks for supported work, it prepares real
